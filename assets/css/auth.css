@@ -1,0 +1,202 @@
+/* ============================================
+   AUTHENTICATION PAGES STYLES (Modern Redesign)
+   ============================================ */
+
+.login-split-screen {
+    min-height: 100vh;
+    overflow: hidden;
+    background: #fff;
+}
+
+/* LEFT SIDE - BRANDING & VISUALS */
+.login-left {
+    /* Deep Ocean Gradient */
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 4rem;
+    color: #ffffff;
+    overflow: hidden;
+    z-index: 1;
+}
+
+/* Abstract Background Shapes (Blobs) */
+.login-shape {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    z-index: -1;
+    opacity: 0.6;
+    animation: float 10s infinite ease-in-out;
+}
+
+.shape-1 {
+    width: 400px;
+    height: 400px;
+    background: #3b82f6;
+    /* Primary Blue */
+    top: -100px;
+    right: -100px;
+    animation-delay: 0s;
+}
+
+.shape-2 {
+    width: 300px;
+    height: 300px;
+    background: #14b8a6;
+    /* Teal */
+    bottom: -50px;
+    left: -50px;
+    animation-delay: 2s;
+}
+
+.shape-3 {
+    width: 200px;
+    height: 200px;
+    background: #8b5cf6;
+    /* Purple accent */
+    top: 40%;
+    left: 40%;
+    transform: translate(-50%, -50%);
+    opacity: 0.4;
+    animation-delay: 4s;
+}
+
+@keyframes float {
+    0% {
+        transform: translate(0, 0);
+    }
+
+    50% {
+        transform: translate(20px, -20px);
+    }
+
+    100% {
+        transform: translate(0, 0);
+    }
+}
+
+.login-left-content {
+    position: relative;
+    z-index: 10;
+}
+
+/* Glassmorphism Testimonial Card */
+.login-testimonial {
+    background: rgba(255, 255, 255, 0.05);
+    /* Ultra subtle white */
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.testimonial-quote {
+    font-size: 1.25rem;
+    line-height: 1.6;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.95);
+}
+
+/* RIGHT SIDE - FORM */
+.login-right {
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    position: relative;
+    z-index: 2;
+}
+
+.login-container {
+    width: 100%;
+    max-width: 440px;
+}
+
+.login-brand-mobile {
+    display: none;
+}
+
+/* LOGIN FORM ELEMENTS */
+.login-header h2 {
+    font-size: 2rem;
+    letter-spacing: -0.025em;
+}
+
+.form-floating-custom>label {
+    padding-left: 1rem;
+}
+
+.form-control-lg {
+    font-size: 1rem;
+    padding: 0.875rem 1rem;
+    border-radius: var(--radius-md);
+    background-color: var(--gray-50);
+    border-color: var(--gray-200);
+}
+
+.form-control-lg:focus {
+    background-color: #fff;
+    border-color: var(--primary-500);
+}
+
+.btn-login {
+    padding: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    font-size: 1rem;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-700) 100%);
+    border: none;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.btn-login:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4);
+}
+
+.social-login-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    background: #fff;
+    color: var(--gray-700);
+    font-weight: 500;
+    transition: all var(--transition-fast);
+}
+
+.social-login-btn:hover {
+    background: var(--gray-50);
+    border-color: var(--gray-400);
+}
+
+/* RESPONSIVE */
+@media (max-width: 991.98px) {
+    .login-left {
+        display: none;
+    }
+
+    .login-brand-mobile {
+        display: block;
+        margin-bottom: 2.5rem;
+        text-align: center;
+    }
+
+    .login-brand-mobile i {
+        font-size: 3rem;
+        background: linear-gradient(135deg, var(--primary-600), var(--primary-400));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+}
