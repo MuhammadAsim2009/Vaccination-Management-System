@@ -52,7 +52,7 @@ $current_page = basename(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
 
             <!-- Hospitals -->
             <li class="nav-item">
-                <a class="nav-link sidebar-link <?= in_array($current_page, ['hospital_list.php', 'add_hospital.php', 'update_hospital.php']) ? 'active' : '' ?>" href="/vaccination_management_system/admin/hospitals/hospital_list.php">
+                <a class="nav-link sidebar-link <?= in_array($current_page, ['hospital_list.php', 'add_hospital.php', 'update_hospital.php', 'delete_hospital.php']) ? 'active' : '' ?>" href="/vaccination_management_system/admin/hospitals/hospital_list.php">
                     <i class="fas fa-hospital"></i>
                     <span>Hospitals</span>
                 </a>
