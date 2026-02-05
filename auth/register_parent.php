@@ -30,27 +30,33 @@ if(isset($_POST['register_btn'])) {
         exit();
     }
 
-    // Insert user into database
-    $stmt_user = $conn->prepare("INSERT INTO users (name, email, password, role) VALUES(?,?,?,?)");
-    $stmt_user->bind_param("ssss", $name, $email, $hashed_password, $role);
-    $stmt_user->execute();
-    $stmt_user->close();
+    // Begin transaction
+    $conn->begin_transaction();
 
-    // Get the user ID after insertion
-    $user_id = $conn->insert_id;
+    try {
+        // Insert into users table
+        $stmt_user = $conn->prepare("INSERT INTO users (name, email, password, role) VALUES (?,?,?,?)");
+        $stmt_user->bind_param("ssss", $name, $email, $hashed_password, $role);
+        $stmt_user->execute();
+        $user_id = $conn->insert_id;
+        $stmt_user->close();
 
-    // Insert parent details into parents table
-    $stmt_parent = $conn->prepare("INSERT INTO parents (user_id, phone, address) VALUES(?,?,?)");
-    $stmt_parent->bind_param("iss", $user_id, $phone, $address);
-    $stmt_parent->execute();
-    $stmt_parent->close();
+        // Insert into hospital table
+        $stmt_parent = $conn->prepare("INSERT INTO parents (user_id, phone, address) VALUES (?,?,?)");
+        $stmt_parent->bind_param("iss", $user_id, $phone, $address);
+        $stmt_parent->execute();
+        $stmt_parent->close();
 
-    if($stmt_user && $stmt_parent) {
-        echo "Registration Successful";
-    } else {
-        echo "Something went Wrong";
+        // Commit transaction
+        $conn->commit();
+
+        echo "<script>alert('Registration Successful'); window.location.href='login.php';</script>";
+
+    } catch(Exception $e) {
+        // Rollback if any error
+        $conn->rollback();
+        echo "<script>alert('Registration Failed: ".$e->getMessage()."'); window.history.back();</script>";
     }
-
 }
 
 ?>

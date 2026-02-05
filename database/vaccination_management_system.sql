@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Feb 04, 2026 at 08:32 AM
+-- Generation Time: Feb 04, 2026 at 09:17 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -90,8 +90,9 @@ CREATE TABLE `hospitals` (
 --
 
 INSERT INTO `hospitals` (`id`, `user_id`, `hospital_name`, `registration_no`, `phone`, `address`, `status`, `created_at`) VALUES
-(1, 3, 'City General Hospital', 'REG-1001', '03073469181', 'Sachal Colony, Larkana', 'approved', '2026-02-03 04:06:32'),
-(2, 5, 'Ali Hospital', 'REG-1002', '03337559726', 'Wagan Road, Larkana', 'pending', '2026-02-03 06:45:45');
+(1, 3, 'City Hospital', 'REG-1001', '03073469181', 'Sachal Colony, Larkana', 'approved', '2026-02-03 04:06:32'),
+(2, 5, 'Ali Hospital', 'REG-1002', '03337559726', 'Wagan Road, Larkana', 'pending', '2026-02-03 06:45:45'),
+(3, 7, 'National Hospital', 'REG-1003', '03115873912', 'VIP Road, Larkana', 'pending', '2026-02-04 19:25:39');
 
 -- --------------------------------------------------------
 
@@ -113,7 +114,8 @@ CREATE TABLE `parents` (
 
 INSERT INTO `parents` (`id`, `user_id`, `phone`, `address`, `created_at`) VALUES
 (1, 2, '03183433480', 'Near Degree College, Nazar Muhalla, Larkana', '2026-02-03 04:06:32'),
-(2, 4, '03228300637', 'Near Szabait, Sachal Colony, Larkana', '2026-02-03 05:53:46');
+(2, 4, '03228300637', 'Near Szabait, Sachal Colony, Larkana', '2026-02-03 05:53:46'),
+(3, 6, '03052820479', 'Near National Bank, Bakirani Road, Larkana', '2026-02-04 18:30:22');
 
 -- --------------------------------------------------------
 
@@ -140,7 +142,9 @@ INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `status`, `creat
 (2, 'Faseeh', 'faseeh@gmail.com', '$2y$10$bfm4vMDA9GS2uvw08.3bJeu/L6rcCOlhzo2iTS5kZF9qkQNN9Z2QW', 'parent', 'active', '2026-02-03 04:06:32'),
 (3, 'City Hospital', 'cityhospital@gmail.com', '$2y$10$.GGC.mT8iWRYkYpuWJ7cmekUQihYUEjnS4jJcT2iU7.CA9nSnY8n2', 'hospital', 'active', '2026-02-03 04:06:32'),
 (4, 'Furqan', 'furqan@gmail.com', '$2y$10$adVBT6IVzEZsT/l8et8Q3edklnQ4yixcN0gFlNvN1/LVATzfao0Ba', 'parent', 'active', '2026-02-03 05:53:46'),
-(5, 'Ali Hospital', 'alihospital@gmail.com', '$2y$10$mG2iODziJCU820Hhov9BDOy0GqZ9leyY8aFMiXQpoAcgGg4MUVx4q', 'hospital', 'active', '2026-02-03 06:45:45');
+(5, 'Ali Hospital', 'alihospital@gmail.com', '$2y$10$mG2iODziJCU820Hhov9BDOy0GqZ9leyY8aFMiXQpoAcgGg4MUVx4q', 'hospital', 'active', '2026-02-03 06:45:45'),
+(6, 'Azam', 'azam@gmail.com', '$2y$10$VEjywJWwwZc7NxaG071z4OVQlnh7F9slW1qgeTSfDCgx2qUGuBWPS', 'parent', 'active', '2026-02-04 18:30:22'),
+(7, 'National Hospital', 'nationalhospital@gmail.com', '$2y$10$.4wmxBzxGgrGjXyVCWF5we9JeGyRNFqxbb3FxzaxWokjv2j4gRA6C', 'hospital', 'active', '2026-02-04 19:25:39');
 
 -- --------------------------------------------------------
 
@@ -286,19 +290,19 @@ ALTER TABLE `children`
 -- AUTO_INCREMENT for table `hospitals`
 --
 ALTER TABLE `hospitals`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `parents`
 --
 ALTER TABLE `parents`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `vaccination_records`

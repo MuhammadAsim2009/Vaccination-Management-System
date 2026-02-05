@@ -1,22 +1,50 @@
+<?php
+// Session Start and Auth Check
+include 'auth_check.php';
+
+// Current Page logic for Title
+$currentPage = basename($_SERVER['PHP_SELF'], ".php");
+$pageTitle = ucwords(str_replace("_", " ", $currentPage));
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo $pageTitle ? $pageTitle . " - VMS Admin" : "VMS Admin"; ?></title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/vaccination_management_system/assets/css/style.css">
+    <!-- Admin Sidebar CSS -->
+    <link rel="stylesheet" href="/vaccination_management_system/assets/css/sidebar.css">
+</head>
+<body>
+
 <!-- ============================================
      VMS Admin Panel - Top Navigation Bar
-     Modern SaaS-style header component
      ============================================ -->
-
 <nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top shadow-sm border-bottom">
     <div class="container-fluid px-4">
         
         <!-- ============================================
              LEFT SIDE: Logo / Brand
              ============================================ -->
-        <a class="navbar-brand d-flex align-items-center fw-bold text-primary" href="../admin/dashboard.php">
+        <a class="navbar-brand d-flex align-items-center fw-bold text-primary" href="/vaccination_management_system/admin/dashboard.php">
             <i class="fas fa-syringe me-2 fs-4"></i>
             <span class="d-none d-sm-inline">VMS Admin</span>
         </a>
 
         <!-- Mobile menu toggle button -->
-        <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent" 
-                aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+        <button class="navbar-toggler border-0" type="button" onclick="toggleSidebar()">
             <span class="navbar-toggler-icon"></span>
         </button>
 
@@ -44,7 +72,7 @@
                  ============================================ -->
             <div class="d-flex align-items-center gap-3">
                 
-                <!-- Notification Bell with Badge -->
+                <!-- Notification Bell -->
                 <div class="position-relative">
                     <button class="btn btn-link text-dark p-2 position-relative" 
                             type="button" 
@@ -58,7 +86,7 @@
                             <span class="visually-hidden">unread notifications</span>
                         </span>
                     </button>
-                    <!-- Notification Dropdown (optional - can be enhanced with actual notifications) -->
+                    <!-- Notification Dropdown -->
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="min-width: 300px; max-height: 400px; overflow-y: auto;">
                         <li><h6 class="dropdown-header">Notifications</h6></li>
                         <li><hr class="dropdown-divider"></li>
@@ -68,24 +96,6 @@
                                 <div class="flex-grow-1">
                                     <div class="fw-semibold small">New appointment request</div>
                                     <div class="text-muted small">2 minutes ago</div>
-                                </div>
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item d-flex align-items-start py-2" href="#">
-                                <i class="fas fa-circle text-success me-2 mt-1" style="font-size: 0.5rem;"></i>
-                                <div class="flex-grow-1">
-                                    <div class="fw-semibold small">Vaccination completed</div>
-                                    <div class="text-muted small">1 hour ago</div>
-                                </div>
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item d-flex align-items-start py-2" href="#">
-                                <i class="fas fa-circle text-warning me-2 mt-1" style="font-size: 0.5rem;"></i>
-                                <div class="flex-grow-1">
-                                    <div class="fw-semibold small">Upcoming vaccination due</div>
-                                    <div class="text-muted small">3 hours ago</div>
                                 </div>
                             </a>
                         </li>
@@ -107,9 +117,14 @@
                             aria-expanded="false">
                         <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" 
                              style="width: 38px; height: 38px; font-size: 0.9rem; font-weight: 600;">
-                            A
+                            <?php 
+                                $adminName = isset($_SESSION['name']) ? $_SESSION['name'] : 'Admin';
+                                echo strtoupper(substr($adminName, 0, 1));
+                            ?>
                         </div>
-                        <span class="d-none d-md-inline fw-medium">Admin</span>
+                        <span class="d-none d-md-inline fw-medium">
+                            <?php echo htmlspecialchars($adminName); ?>
+                        </span>
                         <i class="fas fa-chevron-down small d-none d-md-inline"></i>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="adminProfileDropdown">
@@ -127,7 +142,7 @@
                         </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
-                            <a class="dropdown-item py-2 text-danger" href="../auth/logout.php">
+                            <a class="dropdown-item py-2 text-danger" href="/vaccination_management_system/auth/logout.php">
                                 <i class="fas fa-sign-out-alt me-2"></i>
                                 Logout
                             </a>
@@ -139,18 +154,3 @@
         </div>
     </div>
 </nav>
-
-<!-- ============================================
-     REQUIRED CDN LINKS (Add to your main layout if not already included)
-     ============================================
-     
-     Bootstrap 5 CSS:
-     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-     
-     Font Awesome:
-     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-     
-     Bootstrap 5 JS (for dropdowns and collapse):
-     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-     ============================================ -->
-

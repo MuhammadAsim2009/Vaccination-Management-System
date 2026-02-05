@@ -30,14 +30,14 @@ if(isset($_POST['login_btn'])) {
             } else if($role === 'hospital' && $_SESSION['role'] === 'hospital' && $user['status'] === 'active') {
                 header('Location: ../hospital/dashboard.php');
             } else {
-                echo "Invalid role";
+                echo "<script>alert('Invalid role');</script>";
             }
             exit();
         } else {
-            echo "Invalid Password";
+            echo "<script>alert('Invalid Password');</script>";
         }
     } else {
-        echo "No account found with that email";
+        echo "<script>alert('No account found with that email');</script>";
     }
 }
 

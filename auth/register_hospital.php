@@ -20,17 +20,6 @@ if(isset($_POST['register_btn'])) {
     // Hash the password
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
-    // Check if email already exists
-    $check_email = $conn->prepare("SELECT id FROM users WHERE email = ?");
-    $check_email->bind_param("s", $email);
-    $check_email->execute();
-    $check_email->store_result();
-
-    if($check_email -> num_rows()>0) {
-        echo "Email Already Exists";
-        exit();
-    }
-
     // Check if registration number already exists
     $check_reg_no = $conn->prepare("SELECT id FROM hospitals WHERE registration_no = ?");
     $check_reg_no->bind_param("s", $reg_no);
@@ -42,27 +31,44 @@ if(isset($_POST['register_btn'])) {
         exit();
     }
 
-    // Insert user into database
-    $stmt_user = $conn->prepare("INSERT INTO users (name, email, password, role) VALUES(?,?,?,?)");
-    $stmt_user->bind_param("ssss", $hospital_name, $email, $hashed_password, $role);
-    $stmt_user->execute();
-    $stmt_user->close();
+    // Check if email already exists
+    $check_email = $conn->prepare("SELECT id FROM users WHERE email = ?");
+    $check_email->bind_param("s", $email);
+    $check_email->execute();
+    $check_email->store_result();
 
-    // Get the user ID after insertion
-    $user_id = $conn->insert_id;
-
-    // Insert parent details into parents table
-    $stmt_parent = $conn->prepare("INSERT INTO hospitals (user_id, hospital_name, registration_no, phone, address) VALUES(?,?,?,?,?)");
-    $stmt_parent->bind_param("issss", $user_id, $hospital_name, $reg_no, $phone, $address);
-    $stmt_parent->execute();
-    $stmt_parent->close();
-
-    if($stmt_user && $stmt_parent) {
-        echo "<script>alert('Registration Successful.');</script>";
-    } else {
-        echo "Something went Wrong";
+    if($check_email -> num_rows()>0) {
+        echo "Email Already Exists";
+        exit();
     }
 
+    // Begin transaction
+    $conn->begin_transaction();
+
+    try {
+        // Insert into users table
+        $stmt_user = $conn->prepare("INSERT INTO users (name, email, password, role) VALUES(?,?,?,?)");
+        $stmt_user->bind_param("ssss", $hospital_name, $email, $hashed_password, $role);
+        $stmt_user->execute();
+        $user_id = $conn->insert_id;
+        $stmt_user->close();
+
+        // Insert into hospital table
+        $stmt_hospital = $conn->prepare("INSERT INTO hospitals (user_id, hospital_name, registration_no, phone, address) VALUES(?,?,?,?,?)");
+        $stmt_hospital->bind_param("issss", $user_id, $hospital_name, $reg_no, $phone, $address);
+        $stmt_hospital->execute();
+        $stmt_hospital->close();
+
+        // Commit transaction
+        $conn->commit();
+
+        echo "<script>alert('Registration Successful'); window.location.href='login.php';</script>";
+
+    } catch(Exception $e) {
+        // Rollback if any error
+        $conn->rollback();
+        echo "<script>alert('Registration Failed: ".$e->getMessage()."'); window.history.back();</script>";
+    }
 }
 
 ?>

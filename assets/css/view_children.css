@@ -1,0 +1,403 @@
+/**
+ * ====================================================================
+ * VACCINATION MANAGEMENT SYSTEM - Children Page Styles
+ * ====================================================================
+ * File: assets/css/view_children.css
+ * Description: Page-specific styles for the Children Management admin page
+ * Author: VMS Development Team
+ * Created: 2024
+ * ====================================================================
+ */
+
+/* ==============================================================
+   PAGE HEADER STYLES
+   ============================================================== */
+
+.page-header {
+    padding-top: 1.5rem;
+}
+
+.page-title {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.breadcrumb-nav {
+    font-size: 0.875rem;
+}
+
+.breadcrumb {
+    background: transparent;
+    padding: 0;
+    margin: 0;
+}
+
+.breadcrumb-item a {
+    color: #6c757d;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.breadcrumb-item a:hover {
+    color: #0d6efd;
+}
+
+.breadcrumb-item.active {
+    color: #2c3e50;
+    font-weight: 500;
+}
+
+/* ==============================================================
+   STAT CARDS STYLES
+   ============================================================== */
+
+.stat-card {
+    border-radius: 12px;
+    padding: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.stat-icon {
+    font-size: 2rem;
+    opacity: 0.9;
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-number {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    opacity: 0.9;
+    margin-top: 0.25rem;
+}
+
+/* ==============================================================
+   TABLE STYLES
+   ============================================================== */
+
+.table {
+    font-size: 0.9rem;
+}
+
+.table thead th {
+    border-bottom: 2px solid #e9ecef;
+    font-weight: 600;
+    color: #495057;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+.table tbody tr {
+    transition: background-color 0.15s ease;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.child-avatar {
+    display: inline-block;
+    overflow: hidden;
+}
+
+.child-avatar img {
+    object-fit: cover;
+    border: 2px solid #e9ecef;
+    transition: border-color 0.2s ease;
+}
+
+.child-avatar img:hover {
+    border-color: #0d6efd;
+}
+
+/* ==============================================================
+   BADGE STYLES
+   ============================================================== */
+
+.badge {
+    font-weight: 500;
+    padding: 0.5em 1em;
+}
+
+.badge.bg-gradient {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+/* ==============================================================
+   BUTTON STYLES
+   ============================================================== */
+
+.btn-group-sm .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+.btn-outline-primary,
+.btn-outline-secondary,
+.btn-outline-danger {
+    transition: all 0.2s ease;
+}
+
+.btn-outline-primary:hover {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+.btn-outline-secondary:hover {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: #fff;
+}
+
+.btn-outline-danger:hover {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: #fff;
+}
+
+/* ==============================================================
+   PAGINATION STYLES
+   ============================================================== */
+
+.pagination {
+    gap: 0.25rem;
+}
+
+.page-link {
+    border: 1px solid #dee2e6;
+    padding: 0.5rem 0.75rem;
+    color: #495057;
+    transition: all 0.2s ease;
+}
+
+.page-link:hover {
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    color: #0d6efd;
+}
+
+.page-item.active .page-link {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+/* ==============================================================
+   NOTIFICATION TOAST STYLES
+   ============================================================== */
+
+.notification-toast {
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* ==============================================================
+   CARD STYLES
+   ============================================================== */
+
+.card {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.card-header {
+    font-size: 1rem;
+}
+
+/* ==============================================================
+   RESPONSIVE STYLES
+   ============================================================== */
+
+@media (max-width: 767.98px) {
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .stat-number {
+        font-size: 1.5rem;
+    }
+    
+    .stat-icon {
+        font-size: 1.5rem;
+    }
+    
+    .page-header {
+        text-align: center;
+    }
+    
+    .page-header .text-md-end {
+        text-align: center !important;
+    }
+    
+    .btn-group {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .table {
+        font-size: 0.8rem;
+    }
+    
+    .table th,
+    .table td {
+        padding: 0.75rem 0.5rem;
+    }
+    
+    .child-avatar img {
+        width: 32px !important;
+        height: 32px !important;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .stat-number {
+        font-size: 1.25rem;
+    }
+    
+    .stat-label {
+        font-size: 0.75rem;
+    }
+    
+    .page-title {
+        font-size: 1.25rem;
+    }
+}
+
+/* ==============================================================
+   INPUT GROUP STYLES
+   ============================================================== */
+
+.input-group-text {
+    border-radius: 8px 0 0 8px;
+}
+
+.form-control,
+.form-select {
+    border-radius: 0 8px 8px 0;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+}
+
+/* ==============================================================
+   FILTERS CARD STYLES
+   ============================================================== */
+
+.filters-card .form-label {
+    font-size: 0.875rem;
+    margin-bottom: 0.375rem;
+}
+
+/* ==============================================================
+   TABLE ACTION ICONS
+   ============================================================== */
+
+.action-icons {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+}
+
+.action-icons a,
+.action-icons button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    background: #fff;
+    color: #495057;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.action-icons a:hover {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+.action-icons .btn-edit:hover {
+    background: #6c757d;
+    border-color: #6c757d;
+    color: #fff;
+}
+
+.action-icons .btn-delete:hover {
+    background: #dc3545;
+    border-color: #dc3545;
+    color: #fff;
+}
+
+/* ==============================================================
+   EMPTY STATE STYLES (if needed)
+   ============================================================== */
+
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #6c757d;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-state h5 {
+    margin-bottom: 0.5rem;
+    color: #495057;
+}
+
+/* ==============================================================
+   LOADING SPINNER
+   ============================================================== */
+
+.loading-spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
