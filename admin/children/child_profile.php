@@ -1,6 +1,7 @@
 <?php
 
 include '../../config/db.php';
+include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 

@@ -8,6 +8,7 @@
  */
 
 // Reusable includes
+include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
@@ -97,7 +98,7 @@ function getStatusBadge($status) {
         <div class="card-header bg-white py-3 border-0">
             <div class="row align-items-center g-3">
                 <!-- Search Input Area -->
-                <div class="col-md-4">
+                <div class="col-md-5">
                     <div class="input-group">
                         <span class="input-group-text bg-light border-end-0">
                             <i class="fas fa-search text-muted"></i>

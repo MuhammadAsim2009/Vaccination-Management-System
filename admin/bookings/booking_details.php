@@ -1,5 +1,6 @@
 <?php
 // Reusable includes
+include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 

@@ -7,6 +7,7 @@
  */
 
 // Reusable Includes
+include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
@@ -82,7 +83,7 @@ $vaccines = [
             </div>
             <div class="text-muted small">
                 <i class="fas fa-info-circle me-1"></i>
-                Vaccines are pre-defined and cannot be added or deleted.
+                Hospitals can add vaccines. Admin updates availability, can't add or delete.
             </div>
         </div>
 
@@ -101,14 +102,14 @@ $vaccines = [
                     <div class="col-md-4">
                         <select id="statusFilter" class="form-select">
                             <option value="">All Statuses</option>
-                            <option value="Available">Available Only</option>
-                            <option value="Unavailable">Unavailable Only</option>
+                            <option value="Available">Available</option>
+                            <option value="Unavailable">Unavailable</option>
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <button class="btn btn-primary w-100 d-flex align-items-center justify-content-center gap-2" onclick="applyFilters()">
-                            <i class="fas fa-filter"></i>
-                            <span>Apply Filters</span>
+                        <button class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-2" onclick="resetFilters()">
+                            <i class="fas fa-undo"></i>
+                            <span>Reset Filters</span>
                         </button>
                     </div>
                 </div>
@@ -243,6 +244,12 @@ function applyFilters() {
     } else if (emptyState) {
         emptyState.remove();
     }
+}
+
+function resetFilters() {
+    document.getElementById('vaccineSearch').value = '';
+    document.getElementById('statusFilter').value = '';
+    applyFilters();
 }
 
 // Attach event listeners for real-time feel

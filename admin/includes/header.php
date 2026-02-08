@@ -1,7 +1,4 @@
 <?php
-// Session Start and Auth Check
-include 'auth_check.php';
-
 // Current Page logic for Title
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 $pageTitle = ucwords(str_replace("_", " ", $currentPage));
@@ -23,16 +20,14 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/vaccination_management_system/assets/css/style.css">
-    <!-- Admin Sidebar CSS -->
-    <link rel="stylesheet" href="/vaccination_management_system/assets/css/sidebar.css">
+    <link rel="stylesheet" href="/vaccination_management_system/assets/css/admin.css">
 </head>
 <body>
 
 <!-- ============================================
      VMS Admin Panel - Top Navigation Bar
      ============================================ -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top shadow-sm border-bottom">
+<nav class="navbar navbar-expand-lg navbar-light bg-white sticky-top shadow-sm border-bottom" style="z-index: 1060;">
     <div class="container-fluid px-4">
         
         <!-- ============================================
@@ -74,14 +69,9 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                 
                 <!-- Notification Bell -->
                 <div class="position-relative">
-                    <button class="btn btn-link text-dark p-2 position-relative" 
-                            type="button" 
-                            data-bs-toggle="dropdown" 
-                            aria-expanded="false"
-                            title="Notifications">
+                    <button class="btn-link text-dark p-2 position-relative border-0 bg-transparent" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Notifications">
                         <i class="fas fa-bell fs-5"></i>
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" 
-                              style="font-size: 0.65rem;">
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.65rem;">
                             3
                             <span class="visually-hidden">unread notifications</span>
                         </span>

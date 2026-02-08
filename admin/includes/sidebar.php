@@ -1,5 +1,5 @@
 <?php
-$current_page = basename(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
+$current_page = basename($_SERVER['PHP_SELF']);
 ?>
 
 <!-- ============================================
@@ -7,11 +7,15 @@ $current_page = basename(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
      ============================================ -->
 <aside class="sidebar-wrapper" id="adminSidebar">
     
-    <div class="sidebar-header">
-        <h5 class="d-flex align-items-center">
+    <div class="sidebar-header d-flex align-items-center justify-content-between">
+        <h5 class="d-flex align-items-center mb-0">
             <i class="fas fa-bars me-3"></i>
             Menu
         </h5>
+        <!-- Mobile Close Button -->
+        <button class="btn btn-link text-white d-lg-none p-0" onclick="toggleSidebar()" aria-label="Close Sidebar">
+            <i class="fas fa-times fs-4"></i>
+        </button>
     </div>
 
     <!-- Navigation Menu -->
@@ -85,6 +89,7 @@ $current_page = basename(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
         </div>
     </nav>
 
-    <!-- Mobile Overlay -->
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 </aside>
+
+<!-- Mobile Overlay -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>

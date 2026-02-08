@@ -31,10 +31,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
 <!-- Custom/Common Scripts -->
-<script src="../assets/js/script.js"></script>
-
-<!-- Sidebar Logic -->
-<script src="../assets/js/sidebar.js"></script>
+<script src="/vaccination_management_system/assets/js/admin.js"></script>
 
 </body>
 </html>
