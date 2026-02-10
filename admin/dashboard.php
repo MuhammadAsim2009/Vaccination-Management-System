@@ -18,7 +18,7 @@ include 'includes/sidebar.php';
                  ============================================ -->
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
-                    <h1 class="h3 mb-1 fw-bold">Admin Dashboard</h1>
+                    <h3 class="mb-1 fw-bold">Admin Dashboard</h3>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb mb-0">
                             <li class="breadcrumb-item"><a href="dashboard.php" class="text-decoration-none">Dashboard</a></li>
