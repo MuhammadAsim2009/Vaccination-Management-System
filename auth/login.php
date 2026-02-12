@@ -7,7 +7,8 @@ if(isset($_POST['login_btn'])) {
     $role = $_POST['role'];
 
     // Fetch user from database
-    $check = $conn->prepare("SELECT * FROM users WHERE email = ? AND role = ?");
+    $check = $conn->prepare("SELECT u.*, h.status AS hospital_status FROM users u
+    LEFT JOIN hospitals h ON u.id = h.user_id WHERE u.email = ? AND u.role = ?");
     $check->bind_param("ss", $email, $role);
     $check->execute();
     $result = $check->get_result();
@@ -21,6 +22,7 @@ if(isset($_POST['login_btn'])) {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['name'] = $user['name'];
             $_SESSION['role'] = $role;
+            $_SESSION['hospital_status'] = $user['hospital_status'];
 
             // Redirect based on role
             if($role === 'admin' && $_SESSION['role'] === 'admin' && $user['status'] === 'active') {
@@ -31,8 +33,8 @@ if(isset($_POST['login_btn'])) {
                 header('Location: ../hospital/dashboard.php');
             } else {
                 echo "<script>alert('Invalid role');</script>";
+                exit();
             }
-            exit();
         } else {
             echo "<script>alert('Invalid Password');</script>";
         }

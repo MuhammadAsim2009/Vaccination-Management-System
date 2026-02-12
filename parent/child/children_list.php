@@ -12,7 +12,7 @@ include '../includes/sidebar.php';
 ?>
 
 <!-- Main Content -->
-    <div class="container-fluid">
+    <div class="container-fluid px-4">
         
         <!-- Page Header -->
         <div class="row mb-4">

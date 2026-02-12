@@ -57,7 +57,7 @@ $upcoming_vaccines = [
 ?>
 
 <!-- Main Content Container -->
-<div class="container-fluid px-4 py-4">
+<div class="container-fluid px-4">
 
     <!-- 1️⃣ Page Header & Filters -->
     <div class="row mb-4 align-items-center">

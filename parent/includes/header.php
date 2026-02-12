@@ -117,7 +117,7 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                         </li>
                         
                         <li class="text-center py-2 border-top">
-                            <a href="#" class="text-decoration-none small fw-semibold text-primary">View All Notifications</a>
+                            <a href="/vaccination_management_system/parent/notifications/notifications.php" class="text-decoration-none small fw-semibold text-primary">View All Notifications</a>
                         </li>
                     </ul>
                 </li>
@@ -137,7 +137,7 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                     <!-- Profile Dropdown Menu -->
                     <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-3 mt-2" aria-labelledby="profileDropdown">
                         <li>
-                            <a class="dropdown-item rounded-2 py-2" href="profile.php">
+                            <a class="dropdown-item rounded-2 py-2" href="/vaccination_management_system/parent/profile/profile.php">
                                 <i class="fas fa-user-circle me-2 text-primary"></i>
                                 My Profile
                             </a>

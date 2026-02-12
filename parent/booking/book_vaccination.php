@@ -52,7 +52,7 @@ $vaccines = [
 ?>
 
 <!-- Main Content Container -->
-<div class="container-fluid px-4 py-4">
+<div class="container-fluid px-4">
 
     <!-- 1️⃣ Page Header -->
     <div class="row mb-4 align-items-center">

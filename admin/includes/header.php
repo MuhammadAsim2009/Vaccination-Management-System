@@ -91,7 +91,7 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                         </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
-                            <a class="dropdown-item text-center text-primary small fw-semibold" href="#">
+                            <a class="dropdown-item text-center text-primary small fw-semibold" href="/vaccination_management_system/admin/notifications/notifications.php">
                                 View all notifications
                             </a>
                         </li>
@@ -119,7 +119,7 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="adminProfileDropdown">
                         <li>
-                            <a class="dropdown-item py-2" href="#">
+                            <a class="dropdown-item py-2" href="/vaccination_management_system/admin/profile/profile.php">
                                 <i class="fas fa-user me-2 text-muted"></i>
                                 Profile
                             </a>

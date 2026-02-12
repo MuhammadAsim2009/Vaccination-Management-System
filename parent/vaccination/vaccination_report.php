@@ -13,7 +13,7 @@ include '../includes/header.php';
 include '../includes/sidebar.php';
 ?>
 
-<div class="container-fluid px-4 py-4">
+<div class="container-fluid px-4">
 
     <!-- 1️⃣ Page Header & Filters -->
     <div class="row mb-4">
