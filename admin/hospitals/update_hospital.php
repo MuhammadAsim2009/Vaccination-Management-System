@@ -1,27 +1,55 @@
 <?php
-/**
- * Vaccination Management System - Admin Module
- * update_hospital.php: Update details for an existing hospital.
- * 
- * Tech Stack: PHP, HTML5, CSS3, Bootstrap 5, JavaScript, Font Awesome.
- * Design: SaaS Admin UI, Medical/Healthcare Theme.
- */
-
 // Reusable includes
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// Dummy data for the hospital being edited (Simulating a database fetch)
-$hospital = [
-    'id' => 'HSP-101',
-    'name' => 'City General Hospital',
-    'reg_no' => 'REG-2023-001',
-    'email' => 'contact@citygeneral.com',
-    'phone' => '+1 (555) 123-4567',
-    'address' => '123 Health Ave, Medical District',
-    'status' => 'Accepted'
-];
+// Get hospital ID from URL
+$hospital_id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+$update_success = false;
+$update_error = '';
+
+if ($hospital_id <= 0) {
+    echo "<div class='alert alert-danger m-4 text-center'>Invalid hospital ID.</div>";
+    include '../includes/footer.php';
+    exit();
+}
+
+// Fetch data from datebase
+$stmt_hospitals = $conn->prepare("SELECT h.id, h.hospital_name, h.registration_no, u.email, h.phone, h.address, h.status FROM hospitals h LEFT JOIN users u ON h.user_id = u.id WHERE h.id = ?");
+$stmt_hospitals->bind_param("i", $hospital_id);
+$stmt_hospitals->execute();
+$result_hospitals = $stmt_hospitals->get_result();
+$hospital = $result_hospitals->fetch_assoc();
+
+if(!$hospital) {
+    echo "<div class='alert alert-danger m-4 text-center'>Hospital not found.</div>";
+    include '../includes/footer.php';
+    exit();
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $hospital_name = trim($_POST['hospital_name'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    $address = trim($_POST['address'] ?? '');
+    $status = trim($_POST['status'] ?? '');
+
+    // Update hospital details in the database
+    $stmt_update = $conn->prepare("UPDATE hospitals SET hospital_name = ?, phone = ?, address = ?, status = ? WHERE id = ?");
+    $stmt_update->bind_param("ssssi", $hospital_name, $phone, $address, $status, $hospital_id);
+    if($stmt_update->execute()) {
+        $update_success = true;
+        // Refresh data
+        $hospital['hospital_name'] = $hospital_name;
+        $hospital['phone'] = $phone;
+        $hospital['address'] = $address;
+        $hospital['status'] = $status;
+    } else {
+        $update_error = "Error updating record: " . $conn->error;
+    }
+}
+
 ?>
 
 <div class="main-content p-4">
@@ -45,7 +73,8 @@ $hospital = [
     </div>
 
     <!-- Success/Error Alert Placeholders -->
-    <div id="alertPlaceholder"></div>
+    <div id="alertPlaceholder">
+    </div>
 
     <!-- Form Section -->
     <div class="row justify-content-center">
@@ -57,14 +86,16 @@ $hospital = [
                     </h3>
                 </div>
                 <div class="card-body p-4 p-md-5">
-                    <form id="updateHospitalForm" class="needs-validation" novalidate>
+                    <form id="updateHospitalForm" class="needs-validation" novalidate method="POST">
+                        <!-- Hidden Hospital ID Field -->
+                        <input type="hidden" name="hospital_id" value="<?php echo $hospital['id']; ?>">
                         <div class="row g-4">
                             <!-- Hospital Name -->
                             <div class="col-md-6">
                                 <label for="hospitalName" class="form-label fw-semibold">Hospital Name</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-end-0"><i class="fas fa-hospital text-muted"></i></span>
-                                    <input type="text" class="form-control bg-light border-start-0" id="hospitalName" name="name" value="<?php echo htmlspecialchars($hospital['name']); ?>" placeholder="Enter Full Hospital Name" required>
+                                    <input type="text" class="form-control bg-light border-start-0" id="hospitalName" name="hospital_name" value="<?php echo htmlspecialchars($hospital['hospital_name']); ?>" placeholder="Enter Full Hospital Name" required>
                                 </div>
                                 <div class="invalid-feedback">Please provide a hospital name.</div>
                             </div>
@@ -74,19 +105,19 @@ $hospital = [
                                 <label for="regNumber" class="form-label fw-semibold">Registration Number</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-end-0"><i class="fas fa-id-card text-muted"></i></span>
-                                    <input type="text" class="form-control bg-light border-start-0 text-muted" id="regNumber" name="reg_no" value="<?php echo htmlspecialchars($hospital['reg_no']); ?>" readonly title="Registration Number cannot be edited.">
+                                    <input type="text" class="form-control bg-light border-start-0 text-muted" id="regNumber" name="reg_no" value="<?php echo htmlspecialchars($hospital['registration_no']); ?>" readonly title="Registration Number cannot be edited.">
                                 </div>
                                 <div class="form-text small text-muted">Registration Number cannot be modified.</div>
                             </div>
 
-                            <!-- Email Address -->
+                            <!-- Email Address (READ ONLY) -->
                             <div class="col-md-6">
                                 <label for="email" class="form-label fw-semibold">Email Address</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-end-0"><i class="fas fa-envelope text-muted"></i></span>
-                                    <input type="email" class="form-control bg-light border-start-0" id="email" name="email" value="<?php echo htmlspecialchars($hospital['email']); ?>" placeholder="hospital@example.com" required>
+                                    <input type="email" class="form-control bg-light border-start-0" id="email" name="email" value="<?php echo htmlspecialchars($hospital['email']); ?>" placeholder="hospital@example.com" readonly title="Email cannot be edited.">
                                 </div>
-                                <div class="invalid-feedback">Please provide a valid email address.</div>
+                                <div class="form-text small text-muted">Email cannot be modified.</div>
                             </div>
 
                             <!-- Phone Number -->
@@ -103,9 +134,9 @@ $hospital = [
                             <div class="col-md-12">
                                 <label for="status" class="form-label fw-semibold">Account Status</label>
                                 <select class="form-select bg-light" id="status" name="status" required>
-                                    <option value="Accepted" <?php echo $hospital['status'] == 'Accepted' ? 'selected' : ''; ?>>Accepted</option>
-                                    <option value="Rejected" <?php echo $hospital['status'] == 'Rejected' ? 'selected' : ''; ?>>Rejected</option>
-                                    <option value="Pending" <?php echo $hospital['status'] == 'Pending' ? 'selected' : ''; ?>>Pending</option>
+                                    <option value="approved" <?php echo $hospital['status'] == 'approved' ? 'selected' : ''; ?>>Accept</option>
+                                    <option value="rejected" <?php echo $hospital['status'] == 'rejected' ? 'selected' : ''; ?>>Reject</option>
+                                    <option value="pending" <?php echo $hospital['status'] == 'pending' ? 'selected' : ''; ?>>Pending</option>
                                 </select>
                                 <div class="invalid-feedback">Please select an account status.</div>
                             </div>
@@ -121,7 +152,7 @@ $hospital = [
                             <div class="col-12 mt-5">
                                 <hr class="my-4 opacity-50">
                                 <div class="d-flex justify-content-center flex-column flex-sm-row gap-3">
-                                    <button type="submit" class="btn btn-primary px-5 py-2 rounded-3 shadow-none fw-bold" id="submitBtn">
+                                    <button type="submit" name="update_btn" class="btn btn-primary px-5 py-2 rounded-3 shadow-none fw-bold" id="submitBtn">
                                         <i class="fas fa-save me-2"></i>Update Hospital
                                     </button>
                                     <a href="hospital_list.php" class="btn btn-light px-5 py-2 rounded-3 fw-bold border text-muted">
@@ -133,26 +164,21 @@ $hospital = [
                     </form>
                 </div>
             </div>
-            
-            <p class="text-center mt-4 text-muted small">
-                <i class="fas fa-info-circle me-1 text-primary"></i> Last updated: <span class="fw-bold">Feb 10, 2026</span>
-            </p>
         </div>
     </div>
 </div>
 
 <script>
-/**
- * UI Interactions for Update Hospital Page
- */
+
+// UI Interactions for Update Hospital Page
+
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('updateHospitalForm');
     const submitBtn = document.getElementById('submitBtn');
     const alertPlaceholder = document.getElementById('alertPlaceholder');
 
-    /**
-     * Helper to show alerts
-     */
+    // Helper to show alerts
+
     function showAlert(message, type) {
         const wrapper = document.createElement('div');
         wrapper.innerHTML = [
@@ -161,7 +187,7 @@ document.addEventListener('DOMContentLoaded', function() {
             `       <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} fs-4 me-3"></i>`,
             `       <div>${message}</div>`,
             `   </div>`,
-            '   <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="this.parentElement.remove()"></button>',
+            '   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
             '</div>'
         ].join('');
         alertPlaceholder.append(wrapper);
@@ -174,34 +200,31 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 5000);
     }
 
-    /**
-     * Form Validation & Submission (Mockup)
-     */
+    // Trigger alerts from PHP state
+    <?php if ($update_success): ?>
+        showAlert('Hospital details updated successfully!', 'success');
+    <?php endif; ?>
+    
+    <?php if (!empty($update_error)): ?>
+        showAlert(<?php echo json_encode($update_error); ?>, 'danger');
+    <?php endif; ?>
+
+    // Form Validation & Submission (Mockup)
+    
     form.addEventListener('submit', function(event) {
-        event.preventDefault();
-        
         if (!form.checkValidity()) {
+            event.preventDefault();
             event.stopPropagation();
             form.classList.add('was-validated');
             showAlert('Please ensure all required fields are correctly updated.', 'danger');
-            return;
+        } else {
+            // Allow form to submit to PHP
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Updating...';
         }
-
-        // Mocking record update
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Updating...';
-        
-        setTimeout(() => {
-            showAlert('Hospital details updated successfully! (UI Mockup)', 'success');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="fas fa-save me-2"></i>Update Hospital';
-            form.classList.remove('was-validated');
-            
-            // Log for debug
-            console.log('Record Updated - Data serialized:', new FormData(form));
-        }, 1500);
     }, false);
 });
+
 </script>
 
 <?php include '../includes/footer.php'; ?>

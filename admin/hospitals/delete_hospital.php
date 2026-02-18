@@ -1,27 +1,63 @@
 <?php
-/**
- * Vaccination Management System - Admin Module
- * delete_hospital.php: Permanently remove a hospital from the system.
- * 
- * Tech Stack: PHP, HTML5, CSS3, Bootstrap 5, JavaScript, Font Awesome.
- * Design: SaaS Admin UI, Danger Styling.
- */
-
 // Reusable includes
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
+if (!isset($_POST['hospital_id']) || empty($_POST['hospital_id'])) {
+    echo "<div class='alert alert-danger m-4 text-center'>Invalid hospital ID.</div>";
+    include '../includes/footer.php';
+    exit();
+}
+
+// Get hospital ID from POST
+$hospital_id = $_POST['hospital_id'];
+
+// Handle Final Deletion
+if (isset($_POST['perform_delete'])) {
+    // 1. Get User ID associated with hospital to delete user account as well
+    $stmt_get_user = $conn->prepare("SELECT user_id FROM hospitals WHERE id = ?");
+    $stmt_get_user->bind_param("i", $hospital_id);
+    $stmt_get_user->execute();
+    $res_user = $stmt_get_user->get_result();
+    
+    if ($row_user = $res_user->fetch_assoc()) {
+        $user_id = $row_user['user_id'];
+        
+        // 2. Delete Hospital Record
+        $stmt_del_hosp = $conn->prepare("DELETE FROM hospitals WHERE id = ?");
+        $stmt_del_hosp->bind_param("i", $hospital_id);
+        $stmt_del_hosp->execute();
+
+        // 3. Delete User Account
+        $stmt_del_user = $conn->prepare("DELETE FROM users WHERE id = ?");
+        $stmt_del_user->bind_param("i", $user_id);
+        $stmt_del_user->execute();
+    }
+
+    // Redirect to list with success message
+    echo "<script>window.location.href='hospital_list.php?msg=deleted';</script>";
+    exit();
+}
+
+// Fetch data from datebase
+$stmt_hospitals = $conn->prepare("SELECT h.id, h.hospital_name, h.registration_no, u.email, h.phone, h.address, h.status FROM hospitals h LEFT JOIN users u ON h.user_id = u.id WHERE h.id = ?");
+$stmt_hospitals->bind_param("i", $hospital_id);
+$stmt_hospitals->execute();
+$result_hospitals = $stmt_hospitals->get_result();
+$hospital = $result_hospitals->fetch_assoc();
+
 // Dummy data for the hospital to be deleted (Simulating a fetch from DB)
-$hospital = [
-    'id' => 'HSP-101',
-    'name' => 'City General Hospital',
-    'reg_no' => 'REG-2023-001',
-    'email' => 'contact@citygeneral.com',
-    'phone' => '+1 (555) 123-4567',
-    'address' => '123 Health Ave, Medical District',
-    'status' => 'Accepted'
-];
+// $hospital = [
+//     'id' => 'HSP-101',
+//     'name' => 'City General Hospital',
+//     'reg_no' => 'REG-2023-001',
+//     'email' => 'contact@citygeneral.com',
+//     'phone' => '+1 (555) 123-4567',
+//     'address' => '123 Health Ave, Medical District',
+//     'status' => 'Accepted'
+// ];
 ?>
 
 <div class="main-content p-4">
@@ -70,11 +106,11 @@ $hospital = [
                     <div class="row g-4">
                         <div class="col-md-6">
                             <label class="small text-muted text-uppercase fw-bold mb-1">Hospital Name</label>
-                            <p class="fw-semibold text-dark mb-0 fs-5"><?php echo htmlspecialchars($hospital['name']); ?></p>
+                            <p class="fw-semibold text-dark mb-0 fs-5"><?php echo htmlspecialchars($hospital['hospital_name']); ?></p>
                         </div>
                         <div class="col-md-6">
                             <label class="small text-muted text-uppercase fw-bold mb-1">Registration Number</label>
-                            <p class="fw-semibold text-dark mb-0 fs-5 text-primary"><?php echo htmlspecialchars($hospital['reg_no']); ?></p>
+                            <p class="fw-semibold text-dark mb-0 fs-5 text-primary"><?php echo htmlspecialchars($hospital['registration_no']); ?></p>
                         </div>
                         <div class="col-md-6">
                             <label class="small text-muted text-uppercase fw-bold mb-1">Email Address</label>
@@ -103,7 +139,9 @@ $hospital = [
             <!-- CONFIRMATION & ACTION SECTION -->
             <div class="card border-0 shadow-sm rounded-3 bg-light border-start border-danger border-4">
                 <div class="card-body p-4">
-                    <form id="deleteHospitalForm">
+                    <form id="deleteHospitalForm" method="POST">
+                        <input type="hidden" name="hospital_id" value="<?php echo $hospital_id; ?>">
+                        <input type="hidden" name="perform_delete" value="1">
                         <div class="form-check mb-4">
                             <input class="form-check-input" type="checkbox" id="confirmDelete" required>
                             <label class="form-check-label text-dark fw-bold" for="confirmDelete" style="cursor: pointer;">
@@ -112,7 +150,7 @@ $hospital = [
                         </div>
                         
                         <div class="d-flex flex-column flex-sm-row gap-3 justify-content-center">
-                            <button type="submit" class="btn btn-danger px-5 py-2 rounded-3 fw-bold shadow-none" id="deleteBtn" disabled>
+                            <button type="submit" name="confirm_delete_btn" class="btn btn-danger px-5 py-2 rounded-3 fw-bold shadow-none" id="deleteBtn" disabled>
                                 <i class="fas fa-trash-alt me-2"></i>Delete Hospital
                             </button>
                             <a href="hospital_list.php" class="btn btn-secondary px-5 py-2 rounded-3 fw-bold border-0">
@@ -180,22 +218,13 @@ document.addEventListener('DOMContentLoaded', function() {
      * Form Submission (Mockup)
      */
     form.addEventListener('submit', function(event) {
-        event.preventDefault();
-        
-        if (!confirmCheckbox.checked) return;
-
-        // Mocking deletion progress
-        deleteBtn.disabled = true;
-        deleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
-        
-        setTimeout(() => {
-            showAlert('Hospital record has been permanently deleted. (UI Mockup)', 'success');
-            
-            // Re-style UI to show empty state or redirect
-            setTimeout(() => {
-                window.location.href = 'hospital_list.php?msg=deleted';
-            }, 2000);
-        }, 1500);
+        if (!confirmCheckbox.checked) {
+            event.preventDefault();
+        } else {
+            // Allow submission to PHP
+            deleteBtn.disabled = true;
+            deleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
+        }
     });
 });
 </script>

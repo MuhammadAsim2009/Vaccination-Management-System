@@ -92,9 +92,9 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                 <!-- Hospital Profile Dropdown -->
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="profileDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <img src="https://ui-avatars.com/api/?name=City+Hospital&background=0D6EFD&color=fff" alt="Profile" class="rounded-circle me-2" width="40" height="40">
+                        <img src="https://ui-avatars.com/api/?name=<?= $_SESSION['name'] ?>&background=0D6EFD&color=fff" alt="Profile" class="rounded-circle me-2" width="40" height="40">
                         <div class="d-flex flex-column text-end d-none d-md-block">
-                            <span class="fw-bold small text-dark">City General Hospital</span>
+                            <span class="fw-bold small text-dark"><?= $_SESSION['name'] ?></span>
                         </div>
                     </a>
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="profileDropdown">

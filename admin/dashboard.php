@@ -1,10 +1,107 @@
 <?php
 
+// Include DB
+include '../config/db.php';
+
 // Reusable Includes
 include 'includes/auth_check.php';
+
+// --- AJAX Handler for Chart Data ---
+if (isset($_GET['action']) && $_GET['action'] === 'get_chart_data') {
+    $range = isset($_GET['range']) ? intval($_GET['range']) : 6;
+    if (!in_array($range, [3, 6, 12])) $range = 6;
+
+    $months = [];
+    $trend_counts = [];
+
+    for ($i = $range - 1; $i >= 0; $i--) {
+        $m_start = date('Y-m-01', strtotime("-$i months"));
+        $m_end = date('Y-m-t', strtotime("-$i months"));
+        $months[] = date('M', strtotime("-$i months"));
+        
+        $sql = "SELECT COUNT(*) as count FROM vaccination_schedule WHERE status = 'vaccinated' AND scheduled_date BETWEEN '$m_start' AND '$m_end'";
+        $res = $conn->query($sql);
+        $trend_counts[] = ($res && $row = $res->fetch_assoc()) ? intval($row['count']) : 0;
+    }
+
+    header('Content-Type: application/json');
+    echo json_encode(['labels' => $months, 'data' => $trend_counts]);
+    exit();
+}
+
 include 'includes/header.php';
 include 'includes/sidebar.php';
 
+// --- 1. Statistics ---
+
+// Total Children
+$total_children = 0;
+$res = $conn->query("SELECT COUNT(*) as count FROM children");
+if($res && $row = $res->fetch_assoc()) $total_children = $row['count'];
+
+// Total Vaccinations (Completed)
+$total_vaccinations = 0;
+$res = $conn->query("SELECT COUNT(*) as count FROM vaccination_schedule WHERE status = 'vaccinated'");
+if($res && $row = $res->fetch_assoc()) $total_vaccinations = $row['count'];
+
+// Upcoming Appointments (Pending & Future)
+$upcoming_appointments = 0;
+$res = $conn->query("SELECT COUNT(*) as count FROM vaccination_schedule WHERE status = 'pending' AND scheduled_date >= CURDATE()");
+if($res && $row = $res->fetch_assoc()) $upcoming_appointments = $row['count'];
+
+// Registered Hospitals
+$total_hospitals = 0;
+$res = $conn->query("SELECT COUNT(*) as count FROM hospitals");
+if($res && $row = $res->fetch_assoc()) $total_hospitals = $row['count'];
+
+// --- 2. Charts Data ---
+
+// Vaccination Trends (Last 6 Months)
+$months = [];
+$trend_counts = [];
+for ($i = 5; $i >= 0; $i--) {
+    $m_start = date('Y-m-01', strtotime("-$i months"));
+    $m_end = date('Y-m-t', strtotime("-$i months"));
+    $months[] = date('M', strtotime("-$i months"));
+    
+    $sql = "SELECT COUNT(*) as count FROM vaccination_schedule WHERE status = 'vaccinated' AND scheduled_date BETWEEN '$m_start' AND '$m_end'";
+    $res = $conn->query($sql);
+    $trend_counts[] = ($res && $row = $res->fetch_assoc()) ? $row['count'] : 0;
+}
+
+// Vaccination Status
+$status_counts = ['vaccinated' => 0, 'pending' => 0, 'missed' => 0];
+$sql = "SELECT status, COUNT(*) as count FROM vaccination_schedule GROUP BY status";
+$res = $conn->query($sql);
+if($res) {
+    while($row = $res->fetch_assoc()) {
+        $s = strtolower($row['status']);
+        if(isset($status_counts[$s])) {
+            $status_counts[$s] = $row['count'];
+        }
+    }
+}
+$total_status_count = array_sum($status_counts);
+$status_percentages = [
+    'vaccinated' => $total_status_count > 0 ? round(($status_counts['vaccinated'] / $total_status_count) * 100) : 0,
+    'pending' => $total_status_count > 0 ? round(($status_counts['pending'] / $total_status_count) * 100) : 0,
+    'missed' => $total_status_count > 0 ? round(($status_counts['missed'] / $total_status_count) * 100) : 0
+];
+
+// --- 3. Recent Activity ---
+$recent_activity = [];
+$sql = "SELECT vs.id, c.name as child_name, c.id as child_id, v.vaccine_name, vs.scheduled_date, h.hospital_name, vs.status 
+        FROM vaccination_schedule vs
+        JOIN children c ON vs.child_id = c.id
+        JOIN vaccines v ON vs.vaccine_id = v.id
+        LEFT JOIN hospitals h ON vs.hospital_id = h.id
+        ORDER BY vs.created_at DESC LIMIT 5";
+$res = $conn->query($sql);
+if($res) {
+    while($row = $res->fetch_assoc()) {
+        $recent_activity[] = $row;
+    }
+}
 ?>
 
     <!-- ============================================
@@ -27,10 +124,10 @@ include 'includes/sidebar.php';
                     </nav>
                 </div>
                 <div>
-                    <button class="btn btn-primary">
+                    <a href="export/export_dashboard.php" class="btn btn-primary">
                         <i class="fas fa-download me-2"></i>
                         Export Report
-                    </button>
+                    </a>
                 </div>
             </div>
 
@@ -49,10 +146,10 @@ include 'includes/sidebar.php';
                                     <i class="fas fa-child fs-4"></i>
                                 </div>
                             </div>
-                            <h2 class="fw-bold mb-2">1,247</h2>
+                            <h2 class="fw-bold mb-2"><?= number_format($total_children) ?></h2>
                             <div class="d-flex align-items-center text-success small fw-medium">
-                                <i class="fas fa-arrow-up me-1"></i>
-                                <span>12% from last month</span>
+                                <i class="fas fa-check-circle me-1"></i>
+                                <span>Registered Children</span>
                             </div>
                         </div>
                     </div>
@@ -68,10 +165,10 @@ include 'includes/sidebar.php';
                                     <i class="fas fa-syringe fs-4"></i>
                                 </div>
                             </div>
-                            <h2 class="fw-bold mb-2">8,934</h2>
+                            <h2 class="fw-bold mb-2"><?= number_format($total_vaccinations) ?></h2>
                             <div class="d-flex align-items-center text-success small fw-medium">
-                                <i class="fas fa-arrow-up me-1"></i>
-                                <span>8% from last month</span>
+                                <i class="fas fa-check-circle me-1"></i>
+                                <span>Completed Doses</span>
                             </div>
                         </div>
                     </div>
@@ -87,10 +184,10 @@ include 'includes/sidebar.php';
                                     <i class="fas fa-calendar-check fs-4"></i>
                                 </div>
                             </div>
-                            <h2 class="fw-bold mb-2">342</h2>
+                            <h2 class="fw-bold mb-2"><?= number_format($upcoming_appointments) ?></h2>
                             <div class="d-flex align-items-center text-danger small fw-medium">
-                                <i class="fas fa-arrow-down me-1"></i>
-                                <span>5% from last week</span>
+                                <i class="fas fa-clock me-1"></i>
+                                <span>Pending & Future</span>
                             </div>
                         </div>
                     </div>
@@ -106,10 +203,10 @@ include 'includes/sidebar.php';
                                     <i class="fas fa-hospital fs-4"></i>
                                 </div>
                             </div>
-                            <h2 class="fw-bold mb-2">48</h2>
-                            <div class="d-flex align-items-center text-success small fw-medium">
-                                <i class="fas fa-arrow-up me-1"></i>
-                                <span>3 new this month</span>
+                            <h2 class="fw-bold mb-2"><?= number_format($total_hospitals) ?></h2>
+                            <div class="d-flex align-items-center text-info small fw-medium">
+                                <i class="fas fa-check-circle me-1"></i>
+                                <span>Active Partners</span>
                             </div>
                         </div>
                     </div>
@@ -128,13 +225,13 @@ include 'includes/sidebar.php';
                         <div class="card-header bg-white border-bottom-0 pt-4 px-4 d-flex justify-content-between align-items-center rounded-top-4">
                             <h5 class="mb-0 fw-bold">Vaccination Trends</h5>
                             <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" id="trendRangeBtn" data-bs-toggle="dropdown">
                                     Last 6 Months
                                 </button>
                                 <ul class="dropdown-menu">
-                                    <li><a class="dropdown-item" href="#">Last 3 Months</a></li>
-                                    <li><a class="dropdown-item" href="#">Last 6 Months</a></li>
-                                    <li><a class="dropdown-item" href="#">Last Year</a></li>
+                                    <li><a class="dropdown-item trend-range-item" href="#" data-range="3">Last 3 Months</a></li>
+                                    <li><a class="dropdown-item trend-range-item" href="#" data-range="6">Last 6 Months</a></li>
+                                    <li><a class="dropdown-item trend-range-item" href="#" data-range="12">Last Year</a></li>
                                 </ul>
                             </div>
                         </div>
@@ -162,21 +259,21 @@ include 'includes/sidebar.php';
                                         <div class="rounded-circle bg-success me-2" style="width: 12px; height: 12px;"></div>
                                         <span class="small">Completed</span>
                                     </div>
-                                    <span class="fw-semibold">65%</span>
+                                    <span class="fw-semibold"><?= $status_percentages['vaccinated'] ?>%</span>
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <div class="d-flex align-items-center">
                                         <div class="rounded-circle bg-warning me-2" style="width: 12px; height: 12px;"></div>
                                         <span class="small">Pending</span>
                                     </div>
-                                    <span class="fw-semibold">25%</span>
+                                    <span class="fw-semibold"><?= $status_percentages['pending'] ?>%</span>
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div class="d-flex align-items-center">
                                         <div class="rounded-circle bg-danger me-2" style="width: 12px; height: 12px;"></div>
                                         <span class="small">Missed</span>
                                     </div>
-                                    <span class="fw-semibold">10%</span>
+                                    <span class="fw-semibold"><?= $status_percentages['missed'] ?>%</span>
                                 </div>
                             </div>
                         </div>
@@ -193,7 +290,7 @@ include 'includes/sidebar.php';
                     <div class="card border-0 shadow-sm rounded-4">
                         <div class="card-header bg-white border-bottom-0 pt-4 px-4 d-flex justify-content-between align-items-center rounded-top-4">
                             <h5 class="mb-0 fw-bold">Recent Vaccination Activity</h5>
-                            <a href="#" class="btn btn-sm btn-outline-primary">
+                            <a href="bookings/booking_details.php" class="btn btn-sm btn-outline-primary">
                                 View All
                                 <i class="fas fa-arrow-right ms-2"></i>
                             </a>
@@ -212,191 +309,70 @@ include 'includes/sidebar.php';
                                         </tr>
                                     </thead>
                                     <tbody>
+                                        <?php if(empty($recent_activity)): ?>
+                                            <tr><td colspan="6" class="text-center py-4 text-muted">No recent activity found.</td></tr>
+                                        <?php else: ?>
+                                        <?php foreach($recent_activity as $row): 
+                                            // Status Badge Logic
+                                            $status_badge = 'bg-secondary bg-opacity-10 text-secondary';
+                                            $status_text = ucfirst($row['status']);
+                                            $status_icon = 'fa-circle';
+
+                                            if(strtolower($row['status']) == 'vaccinated') {
+                                                $status_badge = 'bg-success bg-opacity-10 text-success border border-success border-opacity-25';
+                                                $status_text = 'Completed';
+                                                $status_icon = 'fa-check-circle';
+                                            } elseif(strtolower($row['status']) == 'pending') {
+                                                $status_badge = 'bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25';
+                                                $status_text = 'Pending';
+                                                $status_icon = 'fa-clock';
+                                            } elseif(strtolower($row['status']) == 'missed') {
+                                                $status_badge = 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25';
+                                                $status_text = 'Missed';
+                                                $status_icon = 'fa-times-circle';
+                                            }
+
+                                            // Initials
+                                            $initials = strtoupper(substr($row['child_name'], 0, 2));
+                                            $colors = ['primary', 'success', 'info', 'warning', 'danger'];
+                                            $color = $colors[array_rand($colors)];
+                                        ?>
                                         <tr>
                                             <td class="px-4 py-3">
                                                 <div class="d-flex align-items-center">
-                                                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width: 36px; height: 36px; font-size: 0.875rem; font-weight: 600;">
-                                                        AR
+                                                    <div class="rounded-circle bg-<?= $color ?> text-white d-flex align-items-center justify-content-center me-2" style="width: 36px; height: 36px; font-size: 0.875rem; font-weight: 600;">
+                                                        <?= $initials ?>
                                                     </div>
                                                     <div>
-                                                        <div class="fw-semibold">Aarav Raj</div>
-                                                        <div class="text-muted small">ID: CH001</div>
+                                                        <div class="fw-semibold"><?= htmlspecialchars($row['child_name']) ?></div>
+                                                        <div class="text-muted small">ID: CH-<?= $row['child_id'] ?></div>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td class="px-4 py-3">
-                                                <div class="fw-semibold">BCG</div>
-                                                <div class="text-muted small">Tuberculosis</div>
+                                                <div class="fw-semibold"><?= htmlspecialchars($row['vaccine_name']) ?></div>
                                             </td>
                                             <td class="px-4 py-3">
-                                                <div>Jan 15, 2024</div>
-                                                <div class="text-muted small">10:30 AM</div>
+                                                <div><?= date('M d, Y', strtotime($row['scheduled_date'])) ?></div>
                                             </td>
                                             <td class="px-4 py-3">
-                                                <div class="fw-semibold">City General Hospital</div>
-                                                <div class="text-muted small">Mumbai</div>
+                                                <div class="fw-semibold"><?= htmlspecialchars($row['hospital_name'] ?? 'Not Assigned') ?></div>
                                             </td>
                                             <td class="px-4 py-3">
-                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill px-3 py-2">
-                                                    <i class="fas fa-check-circle me-1"></i>
-                                                    Completed
+                                                <span class="badge <?= $status_badge ?> rounded-pill px-3 py-2">
+                                                    <i class="fas <?= $status_icon ?> me-1"></i>
+                                                    <?= $status_text ?>
                                                 </span>
                                             </td>
                                             <td class="px-4 py-3">
-                                                <button class="btn btn-sm btn-outline-primary">
+                                                <a href="children/child_profile.php?id=<?= $row['child_id'] ?>" class="btn btn-sm btn-outline-primary">
                                                     <i class="fas fa-eye"></i>
                                                     View
-                                                </button>
+                                                </a>
                                             </td>
                                         </tr>
-                                        <tr>
-                                            <td class="px-4 py-3">
-                                                <div class="d-flex align-items-center">
-                                                    <div class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center me-2" style="width: 36px; height: 36px; font-size: 0.875rem; font-weight: 600;">
-                                                        PK
-                                                    </div>
-                                                    <div>
-                                                        <div class="fw-semibold">Priya Kumar</div>
-                                                        <div class="text-muted small">ID: CH002</div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div class="fw-semibold">DPT</div>
-                                                <div class="text-muted small">Diphtheria, Pertussis, Tetanus</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div>Jan 18, 2024</div>
-                                                <div class="text-muted small">2:00 PM</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div class="fw-semibold">Metro Health Center</div>
-                                                <div class="text-muted small">Delhi</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 rounded-pill px-3 py-2">
-                                                    <i class="fas fa-clock me-1"></i>
-                                                    Pending
-                                                </span>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <button class="btn btn-sm btn-outline-primary">
-                                                    <i class="fas fa-eye"></i>
-                                                    View
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td class="px-4 py-3">
-                                                <div class="d-flex align-items-center">
-                                                    <div class="rounded-circle bg-warning text-white d-flex align-items-center justify-content-center me-2" style="width: 36px; height: 36px; font-size: 0.875rem; font-weight: 600;">
-                                                        RS
-                                                    </div>
-                                                    <div>
-                                                        <div class="fw-semibold">Rohan Sharma</div>
-                                                        <div class="text-muted small">ID: CH003</div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div class="fw-semibold">Polio</div>
-                                                <div class="text-muted small">Poliomyelitis</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div>Jan 20, 2024</div>
-                                                <div class="text-muted small">11:00 AM</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div class="fw-semibold">Central Medical</div>
-                                                <div class="text-muted small">Bangalore</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill px-3 py-2">
-                                                    <i class="fas fa-check-circle me-1"></i>
-                                                    Completed
-                                                </span>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <button class="btn btn-sm btn-outline-primary">
-                                                    <i class="fas fa-eye"></i>
-                                                    View
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td class="px-4 py-3">
-                                                <div class="d-flex align-items-center">
-                                                    <div class="rounded-circle bg-info text-white d-flex align-items-center justify-content-center me-2" style="width: 36px; height: 36px; font-size: 0.875rem; font-weight: 600;">
-                                                        SK
-                                                    </div>
-                                                    <div>
-                                                        <div class="fw-semibold">Sneha Kapoor</div>
-                                                        <div class="text-muted small">ID: CH004</div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div class="fw-semibold">Measles</div>
-                                                <div class="text-muted small">Measles, Mumps, Rubella</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div>Jan 22, 2024</div>
-                                                <div class="text-muted small">3:30 PM</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div class="fw-semibold">Sunshine Hospital</div>
-                                                <div class="text-muted small">Hyderabad</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-3 py-2">
-                                                    <i class="fas fa-times-circle me-1"></i>
-                                                    Missed
-                                                </span>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <button class="btn btn-sm btn-outline-primary">
-                                                    <i class="fas fa-eye"></i>
-                                                    View
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td class="px-4 py-3">
-                                                <div class="d-flex align-items-center">
-                                                    <div class="rounded-circle bg-danger text-white d-flex align-items-center justify-content-center me-2" style="width: 36px; height: 36px; font-size: 0.875rem; font-weight: 600;">
-                                                        VK
-                                                    </div>
-                                                    <div>
-                                                        <div class="fw-semibold">Vikram Khanna</div>
-                                                        <div class="text-muted small">ID: CH005</div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div class="fw-semibold">Hepatitis B</div>
-                                                <div class="text-muted small">Hepatitis B Vaccine</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div>Jan 25, 2024</div>
-                                                <div class="text-muted small">9:00 AM</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <div class="fw-semibold">Prime Care Clinic</div>
-                                                <div class="text-muted small">Pune</div>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 rounded-pill px-3 py-2">
-                                                    <i class="fas fa-clock me-1"></i>
-                                                    Pending
-                                                </span>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <button class="btn btn-sm btn-outline-primary">
-                                                    <i class="fas fa-eye"></i>
-                                                    View
-                                                </button>
-                                            </td>
-                                        </tr>
+                                        <?php endforeach; ?>
+                                        <?php endif; ?>
                                     </tbody>
                                 </table>
                             </div>
@@ -418,14 +394,16 @@ include 'includes/sidebar.php';
         document.addEventListener('DOMContentLoaded', function() {
             // Vaccination Trends Line Chart
             const trendsCtx = document.getElementById('vaccinationTrendsChart');
+            let trendsChart;
+
             if (trendsCtx) {
-                new Chart(trendsCtx, {
+                trendsChart = new Chart(trendsCtx, {
                     type: 'line',
                     data: {
-                        labels: ['Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'],
+                        labels: <?= json_encode($months) ?>,
                         datasets: [{
                             label: 'Vaccinations',
-                            data: [1200, 1350, 1420, 1580, 1650, 1800],
+                            data: <?= json_encode($trend_counts) ?>,
                             borderColor: 'rgb(59, 130, 246)',
                             backgroundColor: 'rgba(59, 130, 246, 0.1)',
                             tension: 0.4,
@@ -484,6 +462,30 @@ include 'includes/sidebar.php';
                 });
             }
 
+            // Handle Trend Range Change
+            document.querySelectorAll('.trend-range-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const range = this.getAttribute('data-range');
+                    const text = this.textContent;
+
+                    // Update Button Text
+                    document.getElementById('trendRangeBtn').textContent = text;
+
+                    // Fetch Data
+                    fetch(`dashboard.php?action=get_chart_data&range=${range}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (trendsChart) {
+                                trendsChart.data.labels = data.labels;
+                                trendsChart.data.datasets[0].data = data.data;
+                                trendsChart.update();
+                            }
+                        })
+                        .catch(error => console.error('Error fetching chart data:', error));
+                });
+            });
+
             // Vaccination Status Doughnut Chart
             const statusCtx = document.getElementById('vaccinationStatusChart');
             if (statusCtx) {
@@ -492,7 +494,7 @@ include 'includes/sidebar.php';
                     data: {
                         labels: ['Completed', 'Pending', 'Missed'],
                         datasets: [{
-                            data: [65, 25, 10],
+                            data: [<?= $status_percentages['vaccinated'] ?>, <?= $status_percentages['pending'] ?>, <?= $status_percentages['missed'] ?>],
                             backgroundColor: [
                                 'rgb(34, 197, 94)',
                                 'rgb(245, 158, 11)',
@@ -527,4 +529,3 @@ include 'includes/sidebar.php';
     </script>
 
 <?php include 'includes/footer.php'; ?>
-

@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Feb 05, 2026 at 11:18 PM
+-- Generation Time: Feb 18, 2026 at 07:17 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -33,6 +33,7 @@ CREATE TABLE `appointments` (
   `hospital_id` int(11) NOT NULL,
   `child_id` int(11) NOT NULL,
   `vaccine_id` int(11) NOT NULL,
+  `dose_number` int(11) DEFAULT NULL,
   `appointment_date` datetime NOT NULL,
   `status` enum('requested','approved','rejected','completed') NOT NULL DEFAULT 'requested',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
@@ -42,8 +43,10 @@ CREATE TABLE `appointments` (
 -- Dumping data for table `appointments`
 --
 
-INSERT INTO `appointments` (`id`, `parent_id`, `hospital_id`, `child_id`, `vaccine_id`, `appointment_date`, `status`, `created_at`) VALUES
-(1, 1, 1, 1, 1, '2025-02-10 10:00:00', 'requested', '2026-02-03 04:06:32');
+INSERT INTO `appointments` (`id`, `parent_id`, `hospital_id`, `child_id`, `vaccine_id`, `dose_number`, `appointment_date`, `status`, `created_at`) VALUES
+(3, 2, 1, 2, 1, 1, '2026-02-16 11:00:00', 'completed', '2026-02-14 20:21:48'),
+(4, 2, 1, 2, 1, 2, '2026-02-17 14:00:00', 'completed', '2026-02-14 22:32:29'),
+(5, 2, 1, 2, 1, 3, '2026-02-17 11:00:00', 'completed', '2026-02-17 05:33:18');
 
 -- --------------------------------------------------------
 
@@ -66,7 +69,8 @@ CREATE TABLE `children` (
 --
 
 INSERT INTO `children` (`id`, `parent_id`, `name`, `date_of_birth`, `gender`, `blood_group`, `created_at`) VALUES
-(1, 1, 'Baby Doe', '2025-01-01', 'Male', 'O+', '2026-02-03 04:06:32');
+(1, 6, 'Bilawal Ali', '2001-03-15', 'Male', 'O+', '2026-02-12 19:37:29'),
+(2, 4, 'Sahib', '2007-11-27', 'Male', 'O+', '2026-02-12 19:41:20');
 
 -- --------------------------------------------------------
 
@@ -91,8 +95,8 @@ CREATE TABLE `hospitals` (
 
 INSERT INTO `hospitals` (`id`, `user_id`, `hospital_name`, `registration_no`, `phone`, `address`, `status`, `created_at`) VALUES
 (1, 3, 'City Hospital', 'REG-1001', '03073469181', 'Sachal Colony, Larkana', 'approved', '2026-02-03 04:06:32'),
-(2, 5, 'Ali Hospital', 'REG-1002', '03337559726', 'Wagan Road, Larkana', 'pending', '2026-02-03 06:45:45'),
-(3, 7, 'National Hospital', 'REG-1003', '03115873912', 'VIP Road, Larkana', 'pending', '2026-02-04 19:25:39');
+(2, 5, 'Ali Hospital', 'REG-1002', '03337559726', 'Wagan Road, Larkana', 'approved', '2026-02-03 06:45:45'),
+(4, 8, 'National Hospital', 'REG-1003', '03115873912', 'Near Degree College, Nazar Muhalla, Larkana', 'approved', '2026-02-17 13:39:48');
 
 -- --------------------------------------------------------
 
@@ -138,13 +142,13 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`id`, `name`, `email`, `password`, `role`, `status`, `created_at`) VALUES
-(1, 'Muhammad Asim', 'sasim4589@gmail.com', '$2y$10$T2HIEsK2iebnY97XO7fU0uPqFUHdkrGV/BHlmivb4d3nMttCyMlG.', 'admin', 'active', '2026-02-03 04:06:32'),
+(1, 'Muhammad Asim', 'sasim4589@gmail.com', '$2y$10$RAvdxKGHjYDZZZ2HR0GSOe0g0jSg6d.rF7w4/KFHpSU6JLyRMh9zW', 'admin', 'active', '2026-02-03 04:06:32'),
 (2, 'Faseeh', 'faseeh@gmail.com', '$2y$10$bfm4vMDA9GS2uvw08.3bJeu/L6rcCOlhzo2iTS5kZF9qkQNN9Z2QW', 'parent', 'active', '2026-02-03 04:06:32'),
 (3, 'City Hospital', 'cityhospital@gmail.com', '$2y$10$.GGC.mT8iWRYkYpuWJ7cmekUQihYUEjnS4jJcT2iU7.CA9nSnY8n2', 'hospital', 'active', '2026-02-03 04:06:32'),
-(4, 'Furqan', 'furqan@gmail.com', '$2y$10$adVBT6IVzEZsT/l8et8Q3edklnQ4yixcN0gFlNvN1/LVATzfao0Ba', 'parent', 'active', '2026-02-03 05:53:46'),
-(5, 'Ali Hospital', 'alihospital@gmail.com', '$2y$10$mG2iODziJCU820Hhov9BDOy0GqZ9leyY8aFMiXQpoAcgGg4MUVx4q', 'hospital', 'active', '2026-02-03 06:45:45'),
+(4, 'Furqan', 'furqan@gmail.com', '$2y$10$gbQLxBtNdPD1B.EcYT3dE.dcJ0k9LSQgt.Mt/bOw1hHSpZ0Wy/0p.', 'parent', 'active', '2026-02-03 05:53:46'),
+(5, 'Ali Hospital', 'alihospital@gmail.com', '$2y$10$HrlNURnxhLbec75l3TKwKOFsSMl140whJwOG/mEzGdina2sYbi.Ne', 'hospital', 'active', '2026-02-03 06:45:45'),
 (6, 'Azam', 'azam@gmail.com', '$2y$10$VEjywJWwwZc7NxaG071z4OVQlnh7F9slW1qgeTSfDCgx2qUGuBWPS', 'parent', 'active', '2026-02-04 18:30:22'),
-(7, 'National Hospital', 'nationalhospital@gmail.com', '$2y$10$.4wmxBzxGgrGjXyVCWF5we9JeGyRNFqxbb3FxzaxWokjv2j4gRA6C', 'hospital', 'active', '2026-02-04 19:25:39');
+(8, 'National Hospital', 'nationalhospital@gmail.com', '$2y$10$/e5fAGrEKq2HsEvRUzInEu8ogn4bbGGOlS2DwqhumtGznTWjEh6DG', 'hospital', 'active', '2026-02-17 13:39:48');
 
 -- --------------------------------------------------------
 
@@ -160,6 +164,15 @@ CREATE TABLE `vaccination_records` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `vaccination_records`
+--
+
+INSERT INTO `vaccination_records` (`id`, `appointment_id`, `vaccinated_date`, `remarks`, `created_at`) VALUES
+(1, 3, '2026-02-16', 'The vaccine was given successfully on time.', '2026-02-17 05:14:53'),
+(2, 4, '2026-02-17', 'The vaccine was given successfully on time.', '2026-02-17 05:18:51'),
+(3, 5, '2026-02-17', 'The vaccine was given successfully on proper time.', '2026-02-17 05:41:46');
+
 -- --------------------------------------------------------
 
 --
@@ -170,7 +183,9 @@ CREATE TABLE `vaccination_schedule` (
   `id` int(11) NOT NULL,
   `child_id` int(11) NOT NULL,
   `vaccine_id` int(11) NOT NULL,
-  `scheduled_date` date NOT NULL,
+  `hospital_id` int(11) DEFAULT NULL,
+  `scheduled_date` datetime NOT NULL,
+  `dose_number` int(11) NOT NULL,
   `status` enum('pending','vaccinated','missed') NOT NULL DEFAULT 'pending',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -179,9 +194,10 @@ CREATE TABLE `vaccination_schedule` (
 -- Dumping data for table `vaccination_schedule`
 --
 
-INSERT INTO `vaccination_schedule` (`id`, `child_id`, `vaccine_id`, `scheduled_date`, `status`, `created_at`) VALUES
-(1, 1, 1, '2025-01-05', 'pending', '2026-02-03 04:06:32'),
-(2, 1, 2, '2025-01-05', 'pending', '2026-02-03 04:06:32');
+INSERT INTO `vaccination_schedule` (`id`, `child_id`, `vaccine_id`, `hospital_id`, `scheduled_date`, `dose_number`, `status`, `created_at`) VALUES
+(3, 2, 1, 1, '2026-02-17 14:00:00', 2, 'vaccinated', '2026-02-15 16:46:55'),
+(4, 2, 1, 1, '2026-02-16 11:00:00', 1, 'vaccinated', '2026-02-16 11:26:06'),
+(5, 2, 1, 1, '2026-02-17 11:00:00', 3, 'vaccinated', '2026-02-17 05:33:40');
 
 -- --------------------------------------------------------
 
@@ -192,6 +208,8 @@ INSERT INTO `vaccination_schedule` (`id`, `child_id`, `vaccine_id`, `scheduled_d
 CREATE TABLE `vaccines` (
   `id` int(11) NOT NULL,
   `vaccine_name` varchar(100) NOT NULL,
+  `total_dose` int(11) NOT NULL,
+  `target_age_group` varchar(100) NOT NULL,
   `description` text DEFAULT NULL,
   `availability_status` enum('available','unavailable') NOT NULL DEFAULT 'available',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
@@ -201,10 +219,11 @@ CREATE TABLE `vaccines` (
 -- Dumping data for table `vaccines`
 --
 
-INSERT INTO `vaccines` (`id`, `vaccine_name`, `description`, `availability_status`, `created_at`) VALUES
-(1, 'BCG', 'Tuberculosis vaccine', 'available', '2026-02-03 04:06:32'),
-(2, 'Hepatitis B', 'Prevents Hepatitis B', 'available', '2026-02-03 04:06:32'),
-(3, 'Polio', 'Oral Polio Vaccine', 'available', '2026-02-03 04:06:32');
+INSERT INTO `vaccines` (`id`, `vaccine_name`, `total_dose`, `target_age_group`, `description`, `availability_status`, `created_at`) VALUES
+(1, 'Polio', 4, '0–5 years', 'Protects against poliovirus.', 'available', '2026-02-03 04:06:32'),
+(2, 'Hepatitis B', 3, '0–12 months', 'Protects against Hepatitis B virus. ', 'available', '2026-02-03 04:06:32'),
+(5, 'Measles', 2, '9 months–5 years', 'Protects against measles infection.', 'available', '2026-02-03 04:06:32'),
+(6, 'Diphtheria', 3, '0–6 years', 'Protects against diphtheria bacterial infection.', 'available', '2026-02-13 21:39:41');
 
 --
 -- Indexes for dumped tables
@@ -262,7 +281,8 @@ ALTER TABLE `vaccination_records`
 ALTER TABLE `vaccination_schedule`
   ADD PRIMARY KEY (`id`),
   ADD KEY `child_id` (`child_id`),
-  ADD KEY `vaccine_id` (`vaccine_id`);
+  ADD KEY `vaccine_id` (`vaccine_id`),
+  ADD KEY `fk_schedule_hospital` (`hospital_id`);
 
 --
 -- Indexes for table `vaccines`
@@ -278,19 +298,19 @@ ALTER TABLE `vaccines`
 -- AUTO_INCREMENT for table `appointments`
 --
 ALTER TABLE `appointments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `children`
 --
 ALTER TABLE `children`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `hospitals`
 --
 ALTER TABLE `hospitals`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `parents`
@@ -302,25 +322,25 @@ ALTER TABLE `parents`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `vaccination_records`
 --
 ALTER TABLE `vaccination_records`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `vaccination_schedule`
 --
 ALTER TABLE `vaccination_schedule`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `vaccines`
 --
 ALTER TABLE `vaccines`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- Constraints for dumped tables
@@ -339,7 +359,7 @@ ALTER TABLE `appointments`
 -- Constraints for table `children`
 --
 ALTER TABLE `children`
-  ADD CONSTRAINT `children_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `parents` (`id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `children_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `hospitals`
@@ -363,6 +383,7 @@ ALTER TABLE `vaccination_records`
 -- Constraints for table `vaccination_schedule`
 --
 ALTER TABLE `vaccination_schedule`
+  ADD CONSTRAINT `fk_schedule_hospital` FOREIGN KEY (`hospital_id`) REFERENCES `hospitals` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `vaccination_schedule_ibfk_1` FOREIGN KEY (`child_id`) REFERENCES `children` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `vaccination_schedule_ibfk_2` FOREIGN KEY (`vaccine_id`) REFERENCES `vaccines` (`id`) ON DELETE CASCADE;
 COMMIT;

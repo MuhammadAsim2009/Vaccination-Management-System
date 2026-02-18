@@ -1,34 +1,83 @@
 <?php
-/**
- * Admin Profile Page
- * 
- * Allows admin to view and manage their profile details, security settings,
- * and view recent activity logs.
- * 
- * Path: admin/profile/profile.php
- */
-
+// Required Includes
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// --------------------------------------------------------------------------
-// Dummy Data Generation
-// --------------------------------------------------------------------------
-$admin = [
-    'name' => 'Super Admin',
-    'username' => 'admin_master',
-    'email' => 'admin@vms.com',
-    'phone' => '+1 (555) 123-4567',
-    'role' => 'Super Administrator',
-    'status' => 'Active',
-    'last_login' => 'Oct 25, 2023 09:15 AM',
-    'dob' => '1985-08-15',
-    'gender' => 'Male',
-    'address' => '123 Admin Plaza, Tech City, CA 90210',
-    'completion' => 85,
-    'permissions' => ['Manage Users', 'Manage Hospitals', 'System Settings', 'View Reports', 'Audit Logs']
-];
+// Backend Logic
+
+
+$user_id = $_SESSION['user_id'];
+$alert_msg = '';
+$alert_type = '';
+
+// 1. Handle Profile Update
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile_btn'])) {
+    $name = trim($_POST['name']);
+    $email = trim($_POST['email']);
+
+    // Update User Table
+    $stmt_user = $conn->prepare("UPDATE users SET name = ?, email = ? WHERE id = ?");
+    $stmt_user->bind_param("ssi", $name, $email, $user_id);
+    
+    if ($stmt_user->execute()) {
+        $alert_msg = "Profile updated successfully!";
+        $alert_type = "success";
+        $_SESSION['name'] = $name;
+    } else {
+        $alert_msg = "Error updating profile: " . $conn->error;
+        $alert_type = "danger";
+    }
+}
+
+// 2. Handle Password Update
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_password_btn'])) {
+    $current_pass = $_POST['current_password'];
+    $new_pass = $_POST['new_password'];
+    $confirm_pass = $_POST['confirm_password'];
+
+    if ($new_pass !== $confirm_pass) {
+        $alert_msg = "New passwords do not match.";
+        $alert_type = "danger";
+    } else {
+        $stmt_pass = $conn->prepare("SELECT password FROM users WHERE id = ?");
+        $stmt_pass->bind_param("i", $user_id);
+        $stmt_pass->execute();
+        $res_pass = $stmt_pass->get_result();
+        $user_data = $res_pass->fetch_assoc();
+
+        if (password_verify($current_pass, $user_data['password'])) {
+            $new_hash = password_hash($new_pass, PASSWORD_DEFAULT);
+            $stmt_update_pass = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+            $stmt_update_pass->bind_param("si", $new_hash, $user_id);
+            
+            if ($stmt_update_pass->execute()) {
+                $alert_msg = "Password changed successfully.";
+                $alert_type = "success";
+            } else {
+                $alert_msg = "Database error.";
+                $alert_type = "danger";
+            }
+        } else {
+            $alert_msg = "Incorrect current password.";
+            $alert_type = "danger";
+        }
+    }
+}
+
+// 3. Fetch Admin Data
+$stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$admin = $result->fetch_assoc();
+
+// Fallbacks for missing admin table data
+$admin['role'] = $admin['role'] ?? 'Administrator';
+$admin['status'] = $admin['status'] ?? 'Active';
+$admin['permissions'] = ['Manage Users/Parents', 'Manage Hospitals', 'Manage Children', 'Manage Appointments', 'Manage Vaccination Schedule', 'View Dashboard Analytics'];
+
 ?>
 
 <main class="main-content">
@@ -54,6 +103,17 @@ $admin = [
 
         <div class="row g-4">
             
+            <!-- Alert Section -->
+            <?php if($alert_msg): ?>
+            <div class="col-12">
+                <div class="alert alert-<?= $alert_type ?> alert-dismissible fade show border-0 shadow-sm" role="alert">
+                    <i class="fas fa-<?= $alert_type == 'success' ? 'check-circle' : 'exclamation-circle' ?> me-2"></i>
+                    <?= $alert_msg ?>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            </div>
+            <?php endif; ?>
+
             <!-- Left Column: Overview & Timeline -->
             <div class="col-lg-4">
                 
@@ -69,26 +129,22 @@ $admin = [
                             </span>
                         </div>
                         
-                        <h4 class="fw-bold text-dark mb-1"><?= $admin['name'] ?></h4>
-                        <p class="text-muted mb-2"><?= $admin['email'] ?></p>
+                        <h4 class="fw-bold text-dark mb-1"><?= htmlspecialchars($admin['name']) ?></h4>
+                        <p class="text-muted mb-2"><?= htmlspecialchars($admin['email']) ?></p>
                         
                         <div class="d-flex justify-content-center gap-2 mb-4">
                             <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-3">
-                                <i class="fas fa-shield-alt me-1"></i><?= $admin['role'] ?>
+                                <i class="fas fa-shield-alt me-1"></i><?= htmlspecialchars($admin['role']) ?>
                             </span>
                             <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-3">
-                                <i class="fas fa-check-circle me-1"></i><?= $admin['status'] ?>
+                                <i class="fas fa-check-circle me-1"></i><?= htmlspecialchars($admin['status']) ?>
                             </span>
                         </div>
 
                         <div class="d-grid gap-2">
                             <div class="p-3 bg-light rounded-3 text-start">
-                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.7rem;">Last Login</small>
-                                <div class="fw-medium text-dark"><i class="fas fa-clock me-2 text-secondary"></i><?= $admin['last_login'] ?></div>
-                            </div>
-                            <div class="p-3 bg-light rounded-3 text-start">
-                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.7rem;">Phone</small>
-                                <div class="fw-medium text-dark"><i class="fas fa-phone me-2 text-secondary"></i><?= $admin['phone'] ?></div>
+                                <small class="text-muted d-block text-uppercase fw-bold" style="font-size: 0.7rem;">Member Since</small>
+                                <div class="fw-medium text-dark"><i class="fas fa-calendar me-2 text-secondary"></i><?= date('M d, Y', strtotime($admin['created_at'])) ?></div>
                             </div>
                         </div>
                     </div>
@@ -127,31 +183,15 @@ $admin = [
                                 <div class="row g-4 mb-4">
                                     <div class="col-md-6">
                                         <label class="small text-muted fw-bold text-uppercase">Full Name</label>
-                                        <div class="fw-medium text-dark fs-6"><?= $admin['name'] ?></div>
+                                        <div class="fw-medium text-dark fs-6"><?= htmlspecialchars($admin['name']) ?></div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="small text-muted fw-bold text-uppercase">Username</label>
-                                        <div class="fw-medium text-dark fs-6">@<?= $admin['username'] ?></div>
+                                        <div class="fw-medium text-dark fs-6">@<?= htmlspecialchars($admin['email']) ?></div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="small text-muted fw-bold text-uppercase">Email Address</label>
-                                        <div class="fw-medium text-dark fs-6"><?= $admin['email'] ?></div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="small text-muted fw-bold text-uppercase">Phone Number</label>
-                                        <div class="fw-medium text-dark fs-6"><?= $admin['phone'] ?></div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="small text-muted fw-bold text-uppercase">Date of Birth</label>
-                                        <div class="fw-medium text-dark fs-6"><?= date('F d, Y', strtotime($admin['dob'])) ?></div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="small text-muted fw-bold text-uppercase">Gender</label>
-                                        <div class="fw-medium text-dark fs-6"><?= $admin['gender'] ?></div>
-                                    </div>
-                                    <div class="col-12">
-                                        <label class="small text-muted fw-bold text-uppercase">Address</label>
-                                        <div class="fw-medium text-dark fs-6"><?= $admin['address'] ?></div>
+                                        <div class="fw-medium text-dark fs-6"><?= htmlspecialchars($admin['email']) ?></div>
                                     </div>
                                 </div>
 
@@ -169,39 +209,20 @@ $admin = [
 
                             <!-- 4️⃣ Edit Profile Tab -->
                             <div class="tab-pane fade" id="edit" role="tabpanel">
-                                <form id="editProfileForm">
+                                <form id="editProfileForm" method="POST">
+                                    <input type="hidden" name="update_profile_btn" value="1">
                                     <div class="row g-3">
                                         <div class="col-md-6">
                                             <label class="form-label fw-semibold">Full Name</label>
-                                            <input type="text" class="form-control" value="<?= $admin['name'] ?>">
+                                            <input type="text" class="form-control" name="name" value="<?= htmlspecialchars($admin['name']) ?>" required>
                                         </div>
                                         <div class="col-md-6">
                                             <label class="form-label fw-semibold">Username</label>
-                                            <input type="text" class="form-control" value="<?= $admin['username'] ?>" readonly>
+                                            <input type="text" class="form-control" name="username" value="<?= htmlspecialchars($admin['email']) ?>" readonly>
                                         </div>
                                         <div class="col-md-6">
                                             <label class="form-label fw-semibold">Email</label>
-                                            <input type="email" class="form-control" value="<?= $admin['email'] ?>">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label fw-semibold">Phone</label>
-                                            <input type="text" class="form-control" value="<?= $admin['phone'] ?>">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label fw-semibold">Date of Birth</label>
-                                            <input type="date" class="form-control" value="<?= $admin['dob'] ?>">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label fw-semibold">Gender</label>
-                                            <select class="form-select">
-                                                <option value="Male" selected>Male</option>
-                                                <option value="Female">Female</option>
-                                                <option value="Other">Other</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-12">
-                                            <label class="form-label fw-semibold">Address</label>
-                                            <textarea class="form-control" rows="3"><?= $admin['address'] ?></textarea>
+                                            <input type="email" class="form-control" name="email" value="<?= htmlspecialchars($admin['email']) ?>" required>
                                         </div>
                                         <div class="col-12 mt-4 text-end">
                                             <button type="button" class="btn btn-light border me-2">Cancel</button>
@@ -213,7 +234,8 @@ $admin = [
 
                             <!-- 4️⃣ Change Password Tab -->
                             <div class="tab-pane fade" id="password" role="tabpanel">
-                                <form id="passwordForm">
+                                <form id="passwordForm" method="POST">
+                                    <input type="hidden" name="update_password_btn" value="1">
                                     <div class="row g-3">
                                         <div class="col-12">
                                             <div class="alert alert-warning border-0 bg-warning bg-opacity-10 d-flex align-items-center" role="alert">
@@ -223,15 +245,15 @@ $admin = [
                                         </div>
                                         <div class="col-md-12">
                                             <label class="form-label fw-semibold">Current Password</label>
-                                            <input type="password" class="form-control" placeholder="Enter current password">
+                                            <input type="password" class="form-control" name="current_password" placeholder="Enter current password" required>
                                         </div>
                                         <div class="col-md-6">
                                             <label class="form-label fw-semibold">New Password</label>
-                                            <input type="password" class="form-control" placeholder="Enter new password">
+                                            <input type="password" class="form-control" name="new_password" placeholder="Enter new password" required>
                                         </div>
                                         <div class="col-md-6">
                                             <label class="form-label fw-semibold">Confirm Password</label>
-                                            <input type="password" class="form-control" placeholder="Confirm new password">
+                                            <input type="password" class="form-control" name="confirm_password" placeholder="Confirm new password" required>
                                         </div>
                                         <div class="col-12 mt-4 text-end">
                                             <button type="submit" class="btn btn-primary">Update Password</button>
@@ -264,37 +286,6 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('profileTabs').scrollIntoView({ behavior: 'smooth' });
         });
     }
-
-    // Form Submission Simulation
-    const forms = ['editProfileForm', 'passwordForm'];
-    forms.forEach(formId => {
-        const form = document.getElementById(formId);
-        if(form) {
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const btn = form.querySelector('button[type="submit"]');
-                const originalText = btn.innerHTML;
-                
-                // Loading State
-                btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
-                
-                setTimeout(() => {
-                    // Success State
-                    btn.innerHTML = '<i class="fas fa-check me-2"></i>Saved';
-                    btn.classList.replace('btn-primary', 'btn-success');
-                    
-                    setTimeout(() => {
-                        // Reset
-                        btn.innerHTML = originalText;
-                        btn.classList.replace('btn-success', 'btn-primary');
-                        btn.disabled = false;
-                        if(formId === 'passwordForm') form.reset();
-                    }, 2000);
-                }, 1000);
-            });
-        }
-    });
 
     // Initialize Tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))

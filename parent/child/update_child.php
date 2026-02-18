@@ -1,15 +1,68 @@
 <?php
-/**
- * Update Child Details Page
- * Allows parents to update/edit their child’s registered information.
- * 
- * Path: parent/child/update_child.php
- */
-
 // Include authentication and layout files
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+
+// Initialize variables
+$child = null;
+$alert_msg = '';
+$alert_type = '';
+$parent_id = $_SESSION['user_id'];
+
+// 1. Get Child ID from URL and validate
+if (!isset($_GET['id']) || !filter_var($_GET['id'], FILTER_VALIDATE_INT)) {
+    // Redirect if ID is missing or invalid
+    header("Location: children_list.php?error=invalid_id");
+    exit();
+}
+$child_id = (int)$_GET['id'];
+
+// 2. Handle Form Submission (POST request)
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Sanitize and retrieve form data
+    $posted_child_id = filter_input(INPUT_POST, 'child_id', FILTER_VALIDATE_INT);
+    $full_name = trim($_POST['full_name']);
+    $dob = $_POST['dob'];
+    $gender = $_POST['gender'];
+    $blood_group = $_POST['blood_group'];
+
+    // Security check: Ensure the submitted child ID matches the one in the URL and belongs to the parent
+    if ($posted_child_id && $posted_child_id === $child_id) {
+        $stmt_update = $conn->prepare("UPDATE children SET name = ?, date_of_birth = ?, gender = ?, blood_group = ? WHERE id = ? AND parent_id = ?");
+        $stmt_update->bind_param("ssssii", $full_name, $dob, $gender, $blood_group, $child_id, $parent_id);
+
+        if ($stmt_update->execute()) {
+            $alert_msg = "Child details have been updated successfully!";
+            $alert_type = "success";
+        } else {
+            $alert_msg = "Error updating details: " . $conn->error;
+            $alert_type = "danger";
+        }
+        $stmt_update->close();
+    } else {
+        $alert_msg = "Invalid request. Please try again.";
+        $alert_type = "danger";
+    }
+}
+
+// 3. Fetch Child and Parent Data for display (GET request or after POST)
+$stmt_fetch = $conn->prepare("SELECT c.*, u.name as parent_name, u.email as parent_email, p.phone as parent_phone FROM children c JOIN users u ON c.parent_id = u.id LEFT JOIN parents p ON u.id = p.user_id WHERE c.id = ? AND c.parent_id = ?");
+$stmt_fetch->bind_param("ii", $child_id, $parent_id);
+$stmt_fetch->execute();
+$result = $stmt_fetch->get_result();
+$child = $result->fetch_assoc();
+$stmt_fetch->close();
+
+// If child not found or doesn't belong to parent, redirect
+if (!$child) {
+    header("Location: children_list.php?error=not_found");
+    exit();
+}
+
+// Blood group options for the dropdown
+$blood_groups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 ?>
 
 <!-- Main Content Container -->
@@ -39,27 +92,25 @@ include '../includes/sidebar.php';
         <div class="card-header bg-white py-3 border-bottom">
             <div class="d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 fw-bold text-primary">
-                    <i class="fas fa-user-edit me-2"></i>Edit Profile: Sarah Ahmed
+                    <i class="fas fa-user-edit me-2"></i>Edit Profile: <?= htmlspecialchars($child['name']) ?>
                 </h5>
                 <span class="badge bg-soft-primary text-primary border border-primary border-opacity-25">
-                    ID: CH-2026-001
+                    ID: CH-<?= htmlspecialchars($child['id']) ?>
                 </span>
             </div>
         </div>
         <div class="card-body p-4">
             
-            <!-- Success Alert (Hidden by default) -->
-            <div id="successAlert" class="alert alert-success alert-dismissible fade show d-none" role="alert">
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-check-circle fs-4 me-3"></i>
-                    <div>
-                        <strong>Update Successful!</strong> Child details have been updated.
-                    </div>
-                </div>
+            <!-- Success/Error Alert -->
+            <?php if (!empty($alert_msg)): ?>
+            <div id="alertMessage" class="alert alert-<?= $alert_type ?> alert-dismissible fade show" role="alert">
+                <?= $alert_msg ?>
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
+            <?php endif; ?>
 
-            <form id="updateChildForm" class="needs-validation" novalidate>
+            <form id="updateChildForm" class="needs-validation" method="POST" novalidate>
+                <input type="hidden" name="child_id" value="<?= htmlspecialchars($child['id']) ?>">
                 
                 <!-- Section 1: Child Basic Information -->
                 <h6 class="fw-bold text-secondary text-uppercase small mb-3 border-bottom pb-2">
@@ -70,7 +121,7 @@ include '../includes/sidebar.php';
                     <!-- Child ID (Readonly) -->
                     <div class="col-md-2">
                         <label class="form-label fw-semibold text-muted small">Child ID</label>
-                        <input type="text" class="form-control bg-light" value="CH-001" readonly>
+                        <input type="text" class="form-control bg-light" value="CH-<?= htmlspecialchars($child['id']) ?>" readonly>
                     </div>
 
                     <!-- Full Name -->
@@ -78,7 +129,7 @@ include '../includes/sidebar.php';
                         <label for="childName" class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <span class="input-group-text bg-white"><i class="fas fa-user text-muted"></i></span>
-                            <input type="text" class="form-control" id="childName" value="Sarah Ahmed" required>
+                            <input type="text" class="form-control" id="childName" name="full_name" value="<?= htmlspecialchars($child['name']) ?>" required>
                             <div class="invalid-feedback">Please enter the child's full name.</div>
                         </div>
                     </div>
@@ -86,16 +137,11 @@ include '../includes/sidebar.php';
                     <!-- Blood Group -->
                     <div class="col-md-5">
                         <label for="bloodGroup" class="form-label fw-semibold">Blood Group <span class="text-danger">*</span></label>
-                        <select class="form-select" id="bloodGroup" required>
-                            <option value="">Select Blood Group</option>
-                            <option value="A+" selected>A+</option>
-                            <option value="A-">A-</option>
-                            <option value="B+">B+</option>
-                            <option value="B-">B-</option>
-                            <option value="AB+">AB+</option>
-                            <option value="AB-">AB-</option>
-                            <option value="O+">O+</option>
-                            <option value="O-">O-</option>
+                        <select class="form-select" id="bloodGroup" name="blood_group" required>
+                            <option value="" disabled>Select Blood Group</option>
+                            <?php foreach ($blood_groups as $group): ?>
+                                <option value="<?= $group ?>" <?= ($child['blood_group'] == $group) ? 'selected' : '' ?>><?= $group ?></option>
+                            <?php endforeach; ?>
                         </select>
                         <div class="invalid-feedback">Please select a blood group.</div>
                     </div>
@@ -103,30 +149,30 @@ include '../includes/sidebar.php';
                     <!-- Date of Birth -->
                     <div class="col-md-4">
                         <label for="dob" class="form-label fw-semibold">Date of Birth <span class="text-danger">*</span></label>
-                        <input type="date" class="form-control" id="dob" value="2021-01-15" required>
+                        <input type="date" class="form-control" id="dob" name="dob" value="<?= htmlspecialchars($child['date_of_birth']) ?>" required>
                         <div class="invalid-feedback">Please select date of birth.</div>
                     </div>
 
                     <!-- Age (Auto-calculated) -->
                     <div class="col-md-4">
                         <label for="age" class="form-label fw-semibold">Current Age</label>
-                        <input type="text" class="form-control bg-light" id="age" readonly>
+                        <input type="text" class="form-control bg-light" id="age" placeholder="Auto-calculated" readonly>
                     </div>
-
+                    
                     <!-- Gender -->
                     <div class="col-md-4">
                         <label class="form-label fw-semibold d-block">Gender <span class="text-danger">*</span></label>
                         <div class="d-flex gap-3 mt-2">
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="gender" id="genderMale" value="Male">
+                                <input class="form-check-input" type="radio" name="gender" id="genderMale" value="Male" <?= ($child['gender'] == 'Male') ? 'checked' : '' ?> required>
                                 <label class="form-check-label" for="genderMale"><i class="fas fa-mars text-primary me-1"></i>Male</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="gender" id="genderFemale" value="Female" checked>
+                                <input class="form-check-input" type="radio" name="gender" id="genderFemale" value="Female" <?= ($child['gender'] == 'Female') ? 'checked' : '' ?> required>
                                 <label class="form-check-label" for="genderFemale"><i class="fas fa-venus text-danger me-1"></i>Female</label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="radio" name="gender" id="genderOther" value="Other">
+                                <input class="form-check-input" type="radio" name="gender" id="genderOther" value="Other" <?= ($child['gender'] == 'Other') ? 'checked' : '' ?> required>
                                 <label class="form-check-label" for="genderOther">Other</label>
                             </div>
                         </div>
@@ -143,21 +189,21 @@ include '../includes/sidebar.php';
                         <label class="form-label fw-semibold text-muted small">Parent Name</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i class="fas fa-user-circle text-muted"></i></span>
-                            <input type="text" class="form-control bg-light border-start-0" value="John Doe" readonly>
+                            <input type="text" class="form-control bg-light border-start-0" value="<?= htmlspecialchars($child['parent_name']) ?>" readonly>
                         </div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold text-muted small">Contact Number</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i class="fas fa-phone text-muted"></i></span>
-                            <input type="text" class="form-control bg-light border-start-0" value="+1 (555) 123-4567" readonly>
+                            <input type="text" class="form-control bg-light border-start-0" value="<?= htmlspecialchars($child['parent_phone']) ?>" readonly>
                         </div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold text-muted small">Email Address</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i class="fas fa-envelope text-muted"></i></span>
-                            <input type="text" class="form-control bg-light border-start-0" value="john.doe@example.com" readonly>
+                            <input type="text" class="form-control bg-light border-start-0" value="<?= htmlspecialchars($child['parent_email']) ?>" readonly>
                         </div>
                     </div>
                 </div>
@@ -266,41 +312,27 @@ document.addEventListener('DOMContentLoaded', function() {
     calculateAge();
     dobInput.addEventListener('change', calculateAge);
 
-    // 3. Form Validation & Submission Mockup
+    // 3. Form Validation
     const form = document.getElementById('updateChildForm');
     form.addEventListener('submit', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        if (form.checkValidity()) {
-            // Simulate API call / Processing
-            const submitBtn = form.querySelector('button[type="submit"]');
-            const originalBtnText = submitBtn.innerHTML;
-            
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Updating...';
-
-            setTimeout(function() {
-                // Show Success Alert
-                document.getElementById('successAlert').classList.remove('d-none');
-                
-                // Scroll to top
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-                
-                // Reset button state
-                submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Updated!';
-                submitBtn.classList.remove('btn-primary');
-                submitBtn.classList.add('btn-success');
-
-                // Redirect simulation
-                setTimeout(() => {
-                    window.location.href = 'children_list.php';
-                }, 2000);
-            }, 1500);
+        if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
         }
-
         form.classList.add('was-validated');
     }, false);
+
+    // 4. Redirect on successful update
+    <?php if ($alert_type === 'success'): ?>
+        const submitBtn = form.querySelector('button[type="submit"]');
+        submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Updated!';
+        submitBtn.classList.remove('btn-primary');
+        submitBtn.classList.add('btn-success');
+        
+        setTimeout(() => {
+            window.location.href = 'children_list.php';
+        }, 2000);
+    <?php endif; ?>
 });
 </script>
 

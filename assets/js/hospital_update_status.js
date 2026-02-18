@@ -27,7 +27,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var quickActionButtons = {
         print: document.getElementById('printRecordBtn'),
-        profile: document.getElementById('viewProfileBtn'),
         back: document.getElementById('backAppointmentsBtn')
     };
 
@@ -170,12 +169,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (quickActionButtons.print) {
         quickActionButtons.print.addEventListener('click', function () {
             showSuccess('Print action clicked. Printing is disabled in this frontend demo.');
-        });
-    }
-
-    if (quickActionButtons.profile) {
-        quickActionButtons.profile.addEventListener('click', function () {
-            showSuccess('View Child Profile clicked. Navigation is disabled in this frontend demo.');
         });
     }
 

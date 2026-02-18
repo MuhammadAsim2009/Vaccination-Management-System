@@ -1,94 +1,30 @@
 <?php
-/**
- * Search Hospital Page
- * Parent Panel
- * 
- * Allows parents to search and filter hospitals based on location and vaccine availability
- * before proceeding to booking.
- * 
- * Path: parent/booking/search_hospital.php
- */
-
 // Include authentication and layout files
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// Dummy Data for Hospitals (Simulating Database Fetch)
-$hospitals = [
-    [
-        'id' => 1,
-        'name' => 'City General Hospital',
-        'address' => 'Main Boulevard, Medical District, Larkana',
-        'contact' => '+92 300 1234567',
-        'rating' => 4.8,
-        'reviews' => 124,
-        'vaccines' => ['Polio', 'MMR', 'Hepatitis B', 'BCG'],
-        'city' => 'Larkana',
-        'type' => 'Public',
-        'distance' => '2.5 km'
-    ],
-    [
-        'id' => 2,
-        'name' => 'Metro Health Center',
-        'address' => 'Sector 4, Near Central Park, Karachi',
-        'contact' => '+92 321 9876543',
-        'rating' => 4.5,
-        'reviews' => 89,
-        'vaccines' => ['Influenza', 'DPT', 'Typhoid', 'Polio'],
-        'city' => 'Karachi',
-        'type' => 'Private',
-        'distance' => '5.0 km'
-    ],
-    [
-        'id' => 3,
-        'name' => 'Children\'s Wellness Clinic',
-        'address' => 'Block 2, Clifton, Karachi',
-        'contact' => '+92 333 5551234',
-        'rating' => 4.9,
-        'reviews' => 210,
-        'vaccines' => ['Polio', 'Measles', 'Rotavirus', 'PCV'],
-        'city' => 'Karachi',
-        'type' => 'Private',
-        'distance' => '1.2 km'
-    ],
-    [
-        'id' => 4,
-        'name' => 'Community Care Hospital',
-        'address' => 'Gulberg III, Lahore',
-        'contact' => '+92 300 4445555',
-        'rating' => 4.2,
-        'reviews' => 56,
-        'vaccines' => ['Hepatitis A', 'Hepatitis B', 'Chickenpox'],
-        'city' => 'Lahore',
-        'type' => 'Public',
-        'distance' => '8.4 km'
-    ],
-    [
-        'id' => 5,
-        'name' => 'Al-Shifa Medical Center',
-        'address' => 'University Road, Peshawar',
-        'contact' => '+92 345 6667777',
-        'rating' => 4.6,
-        'reviews' => 102,
-        'vaccines' => ['Polio', 'MMR', 'DPT', 'COVID-19'],
-        'city' => 'Peshawar',
-        'type' => 'Private',
-        'distance' => '3.1 km'
-    ],
-    [
-        'id' => 6,
-        'name' => 'National Institute of Child Health',
-        'address' => 'Rafiqui Shaheed Road, Karachi',
-        'contact' => '+92 21 99201261',
-        'rating' => 4.7,
-        'reviews' => 340,
-        'vaccines' => ['All Basic Vaccines', 'Specialized Care'],
-        'city' => 'Karachi',
-        'type' => 'Public',
-        'distance' => '6.7 km'
-    ]
-];
+// Fetch approved hospitals
+$stmt_hospitals = $conn->prepare("SELECT h.id, h.hospital_name, h.address, h.phone, u.email FROM hospitals h LEFT JOIN users u ON h.user_id = u.id WHERE h.status = 'approved'");
+$stmt_hospitals->execute();
+$hospital_results = $stmt_hospitals->get_result();
+
+$hospitals = [];
+
+if ($hospital_results->num_rows > 0) {
+    while ($row = $hospital_results->fetch_assoc()) {
+        $hospitals[] = [
+            'id' => $row['id'],
+            'name' => $row['hospital_name'],
+            'address' => $row['address'],
+            'contact' => $row['phone'],
+            'email' => $row['email'],
+            'type' => 'Hospital',
+        ];
+    }
+}
+
 ?>
 
 <!-- Main Content Container -->
@@ -118,7 +54,7 @@ $hospitals = [
         <div class="card-body p-4">
             <form id="searchForm" class="row g-3">
                 <!-- Search Input -->
-                <div class="col-lg-5 col-md-6">
+                <div class="col-lg-7 col-md-6">
                     <label class="form-label fw-semibold small text-muted text-uppercase">Search</label>
                     <div class="input-group">
                         <span class="input-group-text bg-light border-end-0"><i class="fas fa-search text-muted"></i></span>
@@ -126,35 +62,20 @@ $hospitals = [
                     </div>
                 </div>
 
-                <!-- City Filter -->
-                <div class="col-lg-3 col-md-3">
-                    <label class="form-label fw-semibold small text-muted text-uppercase">City / Area</label>
-                    <select class="form-select" id="cityFilter">
-                        <option value="">All Cities</option>
-                        <option value="Karachi">Karachi</option>
-                        <option value="Lahore">Lahore</option>
-                        <option value="Larkana">Larkana</option>
-                        <option value="Peshawar">Peshawar</option>
-                    </select>
-                </div>
-
-                <!-- Vaccine Filter -->
-                <div class="col-lg-3 col-md-3">
-                    <label class="form-label fw-semibold small text-muted text-uppercase">Available Vaccine</label>
-                    <select class="form-select" id="vaccineFilter">
-                        <option value="">All Vaccines</option>
-                        <option value="Polio">Polio</option>
-                        <option value="MMR">MMR</option>
-                        <option value="Hepatitis B">Hepatitis B</option>
-                        <option value="DPT">DPT</option>
-                        <option value="Influenza">Influenza</option>
+                <!-- Sort Filter -->
+                <div class="col-lg-3 col-md-4">
+                    <label class="form-label fw-semibold small text-muted text-uppercase">Sort By</label>
+                    <select class="form-select" id="sortFilter">
+                        <option value="name_asc">Name (A-Z)</option>
+                        <option value="name_desc">Name (Z-A)</option>
+                        <option value="newest">Newest Added</option>
                     </select>
                 </div>
 
                 <!-- Reset Button -->
-                <div class="col-lg-1 col-md-12 d-flex align-items-end">
-                    <button type="button" class="btn btn-outline-secondary w-100 h-100 py-2" id="btnReset" title="Reset Filters">
-                        <i class="fas fa-undo"></i>
+                <div class="col-lg-2 col-md-2 d-flex align-items-end">
+                    <button type="button" class="btn btn-secondary border w-100 py-2 fw-semibold text-white" id="btnReset">
+                        Reset Filters
                     </button>
                 </div>
             </form>
@@ -165,12 +86,15 @@ $hospitals = [
     <div class="row g-4 mb-4" id="hospitalGrid">
         <?php foreach($hospitals as $hospital): ?>
         <div class="col-xl-4 col-md-6 hospital-card" 
-             data-name="<?= strtolower($hospital['name']) ?>" 
-             data-city="<?= $hospital['city'] ?>" 
-             data-vaccines="<?= strtolower(implode(',', $hospital['vaccines'])) ?>">
+             data-name="<?= strtolower(htmlspecialchars($hospital['name'])) ?>"
+             data-id="<?= $hospital['id'] ?>"
+             data-email="<?= strtolower(htmlspecialchars($hospital['email'])) ?>"
+             data-phone="<?= strtolower(htmlspecialchars($hospital['contact'])) ?>"
+             data-address="<?= strtolower(htmlspecialchars($hospital['address'])) ?>"
+             >
             
             <div class="card h-100 border-0 shadow-sm rounded-4 hover-card transition-all">
-                <div class="card-body p-4">
+                <div class="card-body p-4 d-flex flex-column">
                     <!-- Header: Icon & Rating -->
                     <div class="d-flex justify-content-between align-items-start mb-3">
                         <div class="d-flex align-items-center">
@@ -178,49 +102,29 @@ $hospitals = [
                                 <i class="fas fa-hospital-alt fs-4"></i>
                             </div>
                             <div>
-                                <span class="badge bg-light text-muted border mb-1"><?= $hospital['type'] ?></span>
-                                <div class="small text-muted"><i class="fas fa-map-marker-alt me-1"></i> <?= $hospital['distance'] ?> away</div>
+                                <h5 class="fw-bold text-dark mb-0"><?= htmlspecialchars($hospital['name']) ?></h5>
+                                <span class="badge bg-light text-muted border mt-2"><?= htmlspecialchars($hospital['type']) ?></span>
                             </div>
-                        </div>
-                        <div class="text-end">
-                            <div class="fw-bold text-dark d-flex align-items-center justify-content-end gap-1">
-                                <span><?= $hospital['rating'] ?></span>
-                                <i class="fas fa-star text-warning small"></i>
-                            </div>
-                            <small class="text-muted" style="font-size: 0.75rem;">(<?= $hospital['reviews'] ?> reviews)</small>
                         </div>
                     </div>
 
                     <!-- Hospital Info -->
-                    <h5 class="fw-bold text-dark mb-2"><?= $hospital['name'] ?></h5>
                     <p class="text-muted small mb-2">
-                        <i class="fas fa-location-arrow me-2 text-secondary" style="width: 16px;"></i><?= $hospital['address'] ?>
+                        <i class="fas fa-map-marker-alt me-2 text-secondary" style="width: 16px;"></i><?= htmlspecialchars($hospital['address']) ?>
+                    </p>
+                    <p class="text-muted small mb-2">
+                        <i class="fas fa-envelope me-2 text-secondary" style="width: 16px;"></i><?= htmlspecialchars($hospital['email']) ?>
                     </p>
                     <p class="text-muted small mb-3">
-                        <i class="fas fa-phone-alt me-2 text-secondary" style="width: 16px;"></i><?= $hospital['contact'] ?>
+                        <i class="fas fa-phone-alt me-2 text-secondary" style="width: 16px;"></i><?= htmlspecialchars($hospital['contact']) ?>
                     </p>
 
-                    <hr class="my-3 opacity-10">
-
-                    <!-- Vaccines -->
-                    <div class="mb-4">
-                        <p class="small fw-semibold text-muted mb-2 text-uppercase">Available Vaccines</p>
-                        <div class="d-flex flex-wrap gap-1">
-                            <?php foreach($hospital['vaccines'] as $index => $vaccine): ?>
-                                <?php if($index < 3): ?>
-                                    <span class="badge bg-soft-success text-success border border-success border-opacity-10 fw-normal"><?= $vaccine ?></span>
-                                <?php endif; ?>
-                            <?php endforeach; ?>
-                            <?php if(count($hospital['vaccines']) > 3): ?>
-                                <span class="badge bg-light text-muted border fw-normal">+<?= count($hospital['vaccines']) - 3 ?> more</span>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-
                     <!-- Action Button -->
-                    <a href="book_vaccination.php?hospital_id=<?= $hospital['id'] ?>" class="btn btn-outline-primary w-100 rounded-pill">
-                        Book Appointment <i class="fas fa-arrow-right ms-2"></i>
-                    </a>
+                    <div class="mt-auto">
+                        <a href="book_vaccination.php?hospital_id=<?= $hospital['id'] ?>" class="btn btn-primary w-100 rounded-pill">
+                            Book Appointment <i class="fas fa-arrow-right ms-2"></i>
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -260,29 +164,25 @@ $hospitals = [
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
-    const cityFilter = document.getElementById('cityFilter');
-    const vaccineFilter = document.getElementById('vaccineFilter');
+    const sortFilter = document.getElementById('sortFilter');
     const btnReset = document.getElementById('btnReset');
     const cards = document.querySelectorAll('.hospital-card');
+    const grid = document.getElementById('hospitalGrid');
     const noResults = document.getElementById('noResults');
 
     function filterHospitals() {
         const searchTerm = searchInput.value.toLowerCase();
-        const selectedCity = cityFilter.value;
-        const selectedVaccine = vaccineFilter.value.toLowerCase();
         let visibleCount = 0;
 
         cards.forEach(card => {
             const name = card.getAttribute('data-name');
-            const city = card.getAttribute('data-city');
-            const vaccines = card.getAttribute('data-vaccines');
-            const address = card.querySelector('.card-body p').innerText.toLowerCase();
+            const email = card.getAttribute('data-email');
+            const phone = card.getAttribute('data-phone');
+            const address = card.getAttribute('data-address');
 
-            let matchesSearch = name.includes(searchTerm) || address.includes(searchTerm);
-            let matchesCity = selectedCity === '' || city === selectedCity;
-            let matchesVaccine = selectedVaccine === '' || vaccines.includes(selectedVaccine);
+            let matchesSearch = name.includes(searchTerm) || address.includes(searchTerm) || email.includes(searchTerm) || phone.includes(searchTerm);
 
-            if (matchesSearch && matchesCity && matchesVaccine) {
+            if (matchesSearch) {
                 card.style.display = 'block';
                 visibleCount++;
             } else {
@@ -298,17 +198,40 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function sortHospitals() {
+        const sortValue = sortFilter.value;
+        const cardsArray = Array.from(cards);
+
+        cardsArray.sort((a, b) => {
+            const nameA = a.getAttribute('data-name');
+            const nameB = b.getAttribute('data-name');
+            const idA = parseInt(a.getAttribute('data-id'));
+            const idB = parseInt(b.getAttribute('data-id'));
+
+            if (sortValue === 'name_asc') {
+                return nameA.localeCompare(nameB);
+            } else if (sortValue === 'name_desc') {
+                return nameB.localeCompare(nameA);
+            } else if (sortValue === 'newest') {
+                return idB - idA; // Assuming higher ID is newer
+            }
+            return 0;
+        });
+
+        // Re-append sorted cards
+        cardsArray.forEach(card => grid.insertBefore(card, noResults));
+    }
+
     // Event Listeners
     searchInput.addEventListener('keyup', filterHospitals);
-    cityFilter.addEventListener('change', filterHospitals);
-    vaccineFilter.addEventListener('change', filterHospitals);
+    sortFilter.addEventListener('change', sortHospitals);
 
     // Global Reset Function
     window.resetFilters = function() {
         searchInput.value = '';
-        cityFilter.value = '';
-        vaccineFilter.value = '';
+        sortFilter.value = 'name_asc';
         filterHospitals();
+        sortHospitals();
     };
 
     btnReset.addEventListener('click', window.resetFilters);

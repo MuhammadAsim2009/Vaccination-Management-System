@@ -1,16 +1,77 @@
 <?php
-/**
- * Vaccination Management System - Admin Module
- * add_hospital.php: Manually add a new hospital to the system.
- * 
- * Tech Stack: PHP, HTML5, CSS3, Bootstrap 5, JavaScript, Font Awesome.
- * Design: SaaS Admin UI, Medical/Healthcare Theme.
- */
-
 // Reusable includes
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+
+$alert_msg = '';
+$alert_type = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $hospital_name = $_POST['hospital_name'];
+    $reg_no = $_POST['reg_no'];
+    $email = $_POST['email'];
+    $phone = $_POST['phone'];
+    $address = $_POST['address'];
+    $role = 'hospital';
+    $password = $_POST['password'];
+    $status = $_POST['status'];
+
+    // Hash the password
+    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+
+    // Check if registration number already exists
+    $stmt_check_reg = $conn->prepare("SELECT id FROM hospitals WHERE registration_no = ?");
+    $stmt_check_reg->bind_param("s", $reg_no);
+    $stmt_check_reg->execute();
+    if ($stmt_check_reg->get_result()->num_rows > 0) {
+        $alert_msg = "Registration Number already exists.";
+        $alert_type = "danger";
+    }
+    $stmt_check_reg->close();
+
+    // Check if email already exists
+    if (empty($alert_msg)) {
+        $stmt_check_email = $conn->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt_check_email->bind_param("s", $email);
+        $stmt_check_email->execute();
+        if ($stmt_check_email->get_result()->num_rows > 0) {
+            $alert_msg = "Email address is already in use.";
+            $alert_type = "danger";
+        }
+        $stmt_check_email->close();
+    }
+
+    if (empty($alert_msg)) {
+        // Begin transaction
+        $conn->begin_transaction();
+        try {
+            // Insert into users table
+            $stmt_user = $conn->prepare("INSERT INTO users (name, email, password, role) VALUES(?,?,?,?)");
+            $stmt_user->bind_param("ssss", $hospital_name, $email, $hashed_password, $role);
+            $stmt_user->execute();
+            $user_id = $conn->insert_id;
+            $stmt_user->close();
+
+            // Insert into hospital table
+            $stmt_hospital = $conn->prepare("INSERT INTO hospitals (user_id, hospital_name, registration_no, phone, address, status) VALUES(?,?,?,?,?,?)");
+            $stmt_hospital->bind_param("isssss", $user_id, $hospital_name, $reg_no, $phone, $address, $status);
+            $stmt_hospital->execute();
+            $stmt_hospital->close();
+
+            $conn->commit();
+            $alert_msg = "Hospital registered successfully! Redirecting to list...";
+            $alert_type = "success";
+        } catch (Exception $e) {
+            $conn->rollback();
+            $alert_msg = "Registration Failed: " . $e->getMessage();
+            $alert_type = "danger";
+        }
+    }
+}
+
+
 ?>
 
 <div class="main-content p-4">
@@ -55,14 +116,14 @@ include '../includes/sidebar.php';
                     </h3>
                 </div>
                 <div class="card-body p-4 p-md-5">
-                    <form id="addHospitalForm" class="needs-validation" novalidate>
+                    <form id="addHospitalForm" method="POST" class="needs-validation" novalidate>
                         <div class="row g-4">
                             <!-- Hospital Name -->
                             <div class="col-md-6">
                                 <label for="hospitalName" class="form-label fw-semibold">Hospital Name</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-end-0"><i class="fas fa-hospital text-muted"></i></span>
-                                    <input type="text" class="form-control bg-light border-start-0" id="hospitalName" name="name" placeholder="Enter Full Hospital Name" required>
+                                    <input type="text" class="form-control bg-light border-start-0" id="hospitalName" name="hospital_name" placeholder="Enter Full Hospital Name" required>
                                 </div>
                                 <div class="invalid-feedback">Please provide a hospital name.</div>
                             </div>
@@ -97,14 +158,27 @@ include '../includes/sidebar.php';
                                 <div class="invalid-feedback">Please provide a phone number.</div>
                             </div>
 
+                            <!-- Password Field -->
+                            <div class="col-md-6">
+                                <label for="password" class="form-label fw-semibold">Password</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0"><i class="fas fa-lock text-muted"></i></span>
+                                    <input type="password" class="form-control bg-light border-start-0 border-end-0" id="password" name="password" placeholder="Create password" required>
+                                    <button class="btn btn-light border border-start-0" type="button" id="togglePassword">
+                                        <i class="fas fa-eye text-muted"></i>
+                                    </button>
+                                </div>
+                                <div class="invalid-feedback">Please provide a password.</div>
+                            </div>
+
                             <!-- Status Dropdown -->
-                            <div class="col-md-12">
+                            <div class="col-md-6">
                                 <label for="status" class="form-label fw-semibold">Account Status</label>
                                 <select class="form-select bg-light" id="status" name="status" required>
                                     <option value="" selected disabled>Select status...</option>
-                                    <option value="Accepted">Accepted</option>
-                                    <option value="Rejected">Rejected</option>
-                                    <option value="Pending">Pending</option>
+                                    <option value="approved">Accepted</option>
+                                    <option value="rejected">Rejected</option>
+                                    <option value="pending">Pending</option>
                                 </select>
                                 <div class="invalid-feedback">Please select an account status.</div>
                             </div>
@@ -119,7 +193,7 @@ include '../includes/sidebar.php';
                             <!-- Action Buttons -->
                             <div class="col-12 mt-5">
                                 <hr class="my-4 opacity-50">
-                                <div class="d-flex justify-content-center flex-column flex-sm-row gap-3">
+                                <div class="d-flex justify-content-center flex-column flex-sm-row gap-3" >
                                     <button type="submit" class="btn btn-primary px-5 py-2 rounded-3 shadow-none fw-bold" id="submitBtn">
                                         <i class="fas fa-plus-circle me-2"></i>Add Hospital
                                     </button>
@@ -149,6 +223,30 @@ document.addEventListener('DOMContentLoaded', function() {
     const submitBtn = document.getElementById('submitBtn');
     const alertPlaceholder = document.getElementById('alertPlaceholder');
 
+    // Password Toggle Logic
+    const togglePassword = document.querySelector('#togglePassword');
+    const password = document.querySelector('#password');
+
+    if (togglePassword && password) {
+        togglePassword.addEventListener('click', function () {
+            const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+            password.setAttribute('type', type);
+            this.querySelector('i').classList.toggle('fa-eye');
+            this.querySelector('i').classList.toggle('fa-eye-slash');
+        });
+    }
+
+    // Trigger alerts from PHP state after form submission
+    <?php if (!empty($alert_msg)): ?>
+        showAlert(<?php echo json_encode($alert_msg); ?>, '<?php echo $alert_type; ?>');
+        <?php if ($alert_type === 'success'): ?>
+            // Redirect on success after a delay
+            setTimeout(() => {
+                window.location.href = 'hospital_list.php?msg=added';
+            }, 2500);
+        <?php endif; ?>
+    <?php endif; ?>
+
     /**
      * Helper to show alerts
      */
@@ -160,7 +258,7 @@ document.addEventListener('DOMContentLoaded', function() {
             `       <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} fs-4 me-3"></i>`,
             `       <div>${message}</div>`,
             `   </div>`,
-            '   <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="this.parentElement.remove()"></button>',
+            '   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
             '</div>'
         ].join('');
         alertPlaceholder.append(wrapper);
@@ -174,32 +272,19 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     /**
-     * Form Validation & Submission (Mockup)
+     * Form Validation & Submission
      */
     form.addEventListener('submit', function(event) {
-        event.preventDefault();
-        
         if (!form.checkValidity()) {
+            event.preventDefault();
             event.stopPropagation();
-            form.classList.add('was-validated');
             showAlert('Please fill in all required fields correctly.', 'danger');
-            return;
+        } else {
+            // If form is valid, let it submit. The button will be disabled and show a spinner.
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving...';
         }
-
-        // Mocking record addition
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Saving...';
-        
-        setTimeout(() => {
-            showAlert('Hospital record added successfully! (UI Mockup)', 'success');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="fas fa-plus-circle me-2"></i>Add Hospital';
-            form.reset();
-            form.classList.remove('was-validated');
-            
-            // Log for debug
-            console.log('Record Submitted - Redirect logic would go here in backend.');
-        }, 1500);
+        form.classList.add('was-validated');
     }, false);
 
     // Initial check to disable/manage submit button if empty (Optional requirement)

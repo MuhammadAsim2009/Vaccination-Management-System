@@ -1,16 +1,63 @@
 <?php
-/**
- * Vaccination Report Page
- * Parent Panel
- * 
- * Displays comprehensive vaccination reports, statistics, and history
- * with filtering and export options.
- */
-
 // Include authentication and layout files
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+
+// Fetch Parent ID
+$parent_user_id = $_SESSION['user_id'];
+
+// 1. Fetch Children for Filter
+$children = [];
+$stmt_child = $conn->prepare("SELECT id, name FROM children WHERE parent_id = ?");
+$stmt_child->bind_param("i", $parent_user_id);
+$stmt_child->execute();
+$res_child = $stmt_child->get_result();
+while($row = $res_child->fetch_assoc()) {
+    $children[] = $row;
+}
+
+// 2. Fetch Vaccination Records
+$records = [];
+$stats = ['total' => 0, 'completed' => 0, 'pending' => 0, 'missed' => 0];
+
+$query = "SELECT 
+            vs.id, 
+            vs.scheduled_date, 
+            vs.status, 
+            vs.dose_number, 
+            c.name as child_name, 
+            v.vaccine_name, 
+            h.hospital_name 
+          FROM vaccination_schedule vs
+          JOIN children c ON vs.child_id = c.id
+          JOIN vaccines v ON vs.vaccine_id = v.id
+          LEFT JOIN hospitals h ON vs.hospital_id = h.id
+          WHERE c.parent_id = ?
+          ORDER BY vs.created_at DESC";
+
+$stmt = $conn->prepare($query);
+$stmt->bind_param("i", $parent_user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+
+while($row = $result->fetch_assoc()) {
+    // Normalize status for display
+    if ($row['status'] == 'vaccinated') $row['display_status'] = 'Completed';
+    else $row['display_status'] = ucfirst($row['status']); // Pending, Missed
+    
+    $records[] = $row;
+    
+    // Stats Calculation
+    $stats['total']++;
+    if($row['display_status'] == 'Completed') $stats['completed']++;
+    elseif($row['display_status'] == 'Pending') $stats['pending']++;
+    elseif($row['display_status'] == 'Missed') $stats['missed']++;
+}
+
+// Calculate Completion Rate
+$completion_rate = $stats['total'] > 0 ? round(($stats['completed'] / $stats['total']) * 100) : 0;
 ?>
 
 <div class="container-fluid px-4">
@@ -35,10 +82,10 @@ include '../includes/sidebar.php';
                     <button class="btn btn-outline-secondary shadow-sm" onclick="window.print()">
                         <i class="fas fa-print me-2"></i>Print
                     </button>
-                    <button class="btn btn-outline-primary shadow-sm">
+                    <button id="exportCsvBtn" class="btn btn-outline-primary shadow-sm">
                         <i class="fas fa-file-download me-2"></i>Export CSV
                     </button>
-                    <button class="btn btn-primary shadow-sm">
+                    <button id="exportPdfBtn" class="btn btn-primary shadow-sm">
                         <i class="fas fa-file-pdf me-2"></i>Download PDF
                     </button>
                 </div>
@@ -54,9 +101,9 @@ include '../includes/sidebar.php';
                     <label class="form-label fw-semibold small text-muted">Select Child</label>
                     <select class="form-select" id="filterChild">
                         <option value="all">All Children</option>
-                        <option value="Sarah Ahmed">Sarah Ahmed</option>
-                        <option value="Ahmed Ali">Ahmed Ali</option>
-                        <option value="Fatima Hassan">Fatima Hassan</option>
+                        <?php foreach($children as $child): ?>
+                            <option value="<?= htmlspecialchars($child['name']) ?>"><?= htmlspecialchars($child['name']) ?></option>
+                        <?php endforeach; ?>
                     </select>
                 </div>
                 <div class="col-md-3">
@@ -85,7 +132,7 @@ include '../includes/sidebar.php';
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <p class="text-muted mb-1 small fw-semibold text-uppercase">Total Vaccines</p>
-                            <h3 class="mb-0 fw-bold text-dark" id="statTotal">45</h3>
+                            <h3 class="mb-0 fw-bold text-dark" id="statTotal"><?= $stats['total'] ?></h3>
                         </div>
                         <div class="stats-icon bg-primary bg-opacity-10 rounded-circle p-3">
                             <i class="fas fa-syringe text-primary fs-4"></i>
@@ -107,7 +154,7 @@ include '../includes/sidebar.php';
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <p class="text-muted mb-1 small fw-semibold text-uppercase">Completed</p>
-                            <h3 class="mb-0 fw-bold text-success" id="statCompleted">32</h3>
+                            <h3 class="mb-0 fw-bold text-success" id="statCompleted"><?= $stats['completed'] ?></h3>
                         </div>
                         <div class="stats-icon bg-success bg-opacity-10 rounded-circle p-3">
                             <i class="fas fa-check-circle text-success fs-4"></i>
@@ -115,9 +162,9 @@ include '../includes/sidebar.php';
                     </div>
                     <div class="mt-3">
                         <div class="progress" style="height: 6px;">
-                            <div class="progress-bar bg-success" role="progressbar" style="width: 71%"></div>
+                            <div class="progress-bar bg-success" role="progressbar" style="width: <?= $completion_rate ?>%"></div>
                         </div>
-                        <small class="text-success mt-1 d-block">71% Completion Rate</small>
+                        <small class="text-success mt-1 d-block"><?= $completion_rate ?>% Completion Rate</small>
                     </div>
                 </div>
             </div>
@@ -130,7 +177,7 @@ include '../includes/sidebar.php';
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <p class="text-muted mb-1 small fw-semibold text-uppercase">Pending</p>
-                            <h3 class="mb-0 fw-bold text-warning" id="statPending">10</h3>
+                            <h3 class="mb-0 fw-bold text-warning" id="statPending"><?= $stats['pending'] ?></h3>
                         </div>
                         <div class="stats-icon bg-warning bg-opacity-10 rounded-circle p-3">
                             <i class="fas fa-clock text-warning fs-4"></i>
@@ -138,7 +185,7 @@ include '../includes/sidebar.php';
                     </div>
                     <div class="mt-3">
                         <small class="text-warning">
-                            <i class="fas fa-calendar-alt me-1"></i>5 upcoming this month
+                            <i class="fas fa-calendar-alt me-1"></i>Upcoming scheduled
                         </small>
                     </div>
                 </div>
@@ -152,7 +199,7 @@ include '../includes/sidebar.php';
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <p class="text-muted mb-1 small fw-semibold text-uppercase">Missed</p>
-                            <h3 class="mb-0 fw-bold text-danger" id="statMissed">3</h3>
+                            <h3 class="mb-0 fw-bold text-danger" id="statMissed"><?= $stats['missed'] ?></h3>
                         </div>
                         <div class="stats-icon bg-danger bg-opacity-10 rounded-circle p-3">
                             <i class="fas fa-exclamation-triangle text-danger fs-4"></i>
@@ -193,68 +240,48 @@ include '../includes/sidebar.php';
                 </div>
                 <div class="card-body p-4" style="max-height: 400px; overflow-y: auto;">
                     <div class="timeline-wrapper" id="timelineContainer">
-                        <!-- Item 1 -->
-                        <div class="timeline-item" data-child="Sarah Ahmed" data-date="2026-02-10" data-status="Completed">
-                            <div class="timeline-icon completed">
-                                <i class="fas fa-check small"></i>
+                        <?php 
+                        // Show top 5 recent activities
+                        $recent_activity = array_slice($records, 0, 5);
+                        foreach($recent_activity as $act): 
+                            $status_class = '';
+                            $icon = '';
+                            $badge_class = '';
+                            
+                            if($act['display_status'] == 'Completed') {
+                                $status_class = 'completed';
+                                $icon = 'fa-check';
+                                $badge_class = 'bg-success-subtle text-success border border-success border-opacity-25';
+                            } elseif($act['display_status'] == 'Pending') {
+                                $status_class = 'pending';
+                                $icon = 'fa-clock';
+                                $badge_class = 'bg-warning-subtle text-warning border border-warning border-opacity-25';
+                            } else {
+                                $status_class = 'missed';
+                                $icon = 'fa-times';
+                                $badge_class = 'bg-danger-subtle text-danger border border-danger border-opacity-25';
+                            }
+                        ?>
+                        <div class="timeline-item" data-child="<?= htmlspecialchars($act['child_name']) ?>" data-date="<?= date('Y-m-d', strtotime($act['scheduled_date'])) ?>" data-status="<?= $act['display_status'] ?>">
+                            <div class="timeline-icon <?= $status_class ?>">
+                                <i class="fas <?= $icon ?> small"></i>
                             </div>
-                            <h6 class="fw-bold mb-1 text-dark">Polio (OPV) - Dose 3</h6>
+                            <h6 class="fw-bold mb-1 text-dark"><?= htmlspecialchars($act['vaccine_name']) ?> - Dose <?= $act['dose_number'] ?></h6>
                             <p class="text-muted small mb-1">
-                                <i class="fas fa-child me-1"></i> Sarah Ahmed
+                                <i class="fas fa-child me-1"></i> <?= htmlspecialchars($act['child_name']) ?>
                             </p>
                             <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-success-subtle text-success border border-success border-opacity-25">Completed</span>
-                                <small class="text-muted">Feb 10, 2026</small>
+                                <span class="badge <?= $badge_class ?>"><?= $act['display_status'] ?></span>
+                                <small class="text-muted"><?= date('M d, Y', strtotime($act['scheduled_date'])) ?></small>
                             </div>
                         </div>
-
-                        <!-- Item 2 -->
-                        <div class="timeline-item" data-child="Ahmed Ali" data-date="2026-02-15" data-status="Pending">
-                            <div class="timeline-icon pending">
-                                <i class="fas fa-clock small"></i>
-                            </div>
-                            <h6 class="fw-bold mb-1 text-dark">Measles - Dose 1</h6>
-                            <p class="text-muted small mb-1">
-                                <i class="fas fa-child me-1"></i> Ahmed Ali
-                            </p>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-warning-subtle text-warning border border-warning border-opacity-25">Due Soon</span>
-                                <small class="text-muted">Feb 15, 2026</small>
-                            </div>
-                        </div>
-
-                        <!-- Item 3 -->
-                        <div class="timeline-item" data-child="Fatima Hassan" data-date="2026-01-28" data-status="Missed">
-                            <div class="timeline-icon missed">
-                                <i class="fas fa-times small"></i>
-                            </div>
-                            <h6 class="fw-bold mb-1 text-dark">Hepatitis B - Dose 2</h6>
-                            <p class="text-muted small mb-1">
-                                <i class="fas fa-child me-1"></i> Fatima Hassan
-                            </p>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-danger-subtle text-danger border border-danger border-opacity-25">Missed</span>
-                                <small class="text-muted">Jan 28, 2026</small>
-                            </div>
-                        </div>
-
-                        <!-- Item 4 -->
-                        <div class="timeline-item" data-child="Sarah Ahmed" data-date="2026-01-15" data-status="Completed">
-                            <div class="timeline-icon completed">
-                                <i class="fas fa-check small"></i>
-                            </div>
-                            <h6 class="fw-bold mb-1 text-dark">BCG Vaccine</h6>
-                            <p class="text-muted small mb-1">
-                                <i class="fas fa-child me-1"></i> Sarah Ahmed
-                            </p>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-success-subtle text-success border border-success border-opacity-25">Completed</span>
-                                <small class="text-muted">Jan 15, 2026</small>
-                            </div>
-                        </div>
+                        <?php endforeach; ?>
+                        <?php if(empty($recent_activity)): ?>
+                            <div class="text-center text-muted py-3">No recent activity found.</div>
+                        <?php endif; ?>
                     </div>
                     <div class="text-center mt-2">
-                        <a href="#" class="btn btn-link text-decoration-none small fw-bold">View Full Timeline</a>
+                        <!-- <a href="#" class="btn btn-link text-decoration-none small fw-bold">View Full Timeline</a> -->
                     </div>
                 </div>
             </div>
@@ -287,105 +314,61 @@ include '../includes/sidebar.php';
                         </tr>
                     </thead>
                     <tbody id="tableBody">
-                        <!-- Row 1 -->
-                        <tr data-child="Sarah Ahmed" data-date="2026-02-10" data-status="Completed">
-                            <td class="px-4 py-3 fw-medium">Feb 10, 2026</td>
-                            <td class="px-4 py-3">
-                                <div class="d-flex align-items-center">
-                                    <div class="avatar-circle bg-soft-primary me-2 rounded-circle d-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:12px;">SA</div>
-                                    <span>Sarah Ahmed</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">Polio (OPV)</td>
-                            <td class="px-4 py-3"><span class="badge bg-light text-dark border">3rd</span></td>
-                            <td class="px-4 py-3 text-muted small">City General Hospital</td>
-                            <td class="px-4 py-3">
-                                <span class="badge bg-success-subtle text-success border border-success border-opacity-25">Completed</span>
-                            </td>
-                            <td class="px-4 py-3 text-end">
-                                <button class="btn btn-sm btn-outline-secondary"><i class="fas fa-eye"></i></button>
-                            </td>
-                        </tr>
-                        
-                        <!-- Row 2 -->
-                        <tr data-child="Ahmed Ali" data-date="2026-02-15" data-status="Pending">
-                            <td class="px-4 py-3 fw-medium">Feb 15, 2026</td>
-                            <td class="px-4 py-3">
-                                <div class="d-flex align-items-center">
-                                    <div class="avatar-circle bg-soft-success me-2 rounded-circle d-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:12px;">AA</div>
-                                    <span>Ahmed Ali</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">Measles</td>
-                            <td class="px-4 py-3"><span class="badge bg-light text-dark border">1st</span></td>
-                            <td class="px-4 py-3 text-muted small">Metro Health Center</td>
-                            <td class="px-4 py-3">
-                                <span class="badge bg-warning-subtle text-warning border border-warning border-opacity-25">Pending</span>
-                            </td>
-                            <td class="px-4 py-3 text-end">
-                                <button class="btn btn-sm btn-outline-secondary"><i class="fas fa-eye"></i></button>
-                            </td>
-                        </tr>
+                        <?php foreach($records as $rec): 
+                            // Determine styles based on status
+                            $badge_class = '';
+                            $avatar_bg = 'bg-soft-primary';
+                            
+                            if($rec['display_status'] == 'Completed') {
+                                $badge_class = 'bg-success-subtle text-success border border-success border-opacity-25';
+                                $avatar_bg = 'bg-soft-success';
+                            } elseif($rec['display_status'] == 'Pending') {
+                                $badge_class = 'bg-warning-subtle text-warning border border-warning border-opacity-25';
+                                $avatar_bg = 'bg-soft-warning';
+                            } else {
+                                $badge_class = 'bg-danger-subtle text-danger border border-danger border-opacity-25';
+                                $avatar_bg = 'bg-soft-danger';
+                            }
 
-                        <!-- Row 3 -->
-                        <tr data-child="Fatima Hassan" data-date="2026-01-28" data-status="Missed">
-                            <td class="px-4 py-3 fw-medium">Jan 28, 2026</td>
+                            // Initials
+                            $initials = strtoupper(substr($rec['child_name'], 0, 2));
+                            
+                            // Ordinal Dose
+                            $dose_display = $rec['dose_number'];
+                            $ends = array('th','st','nd','rd','th','th','th','th','th','th');
+                            if ((($dose_display % 100) >= 11) && (($dose_display%100) <= 13)) $dose_suffix = 'th';
+                            else $dose_suffix = $ends[$dose_display % 10];
+                        ?>
+                        <tr data-child="<?= htmlspecialchars($rec['child_name']) ?>" data-date="<?= date('Y-m-d', strtotime($rec['scheduled_date'])) ?>" data-status="<?= $rec['display_status'] ?>">
+                            <td class="px-4 py-3 fw-medium"><?= date('M d, Y', strtotime($rec['scheduled_date'])) ?></td>
                             <td class="px-4 py-3">
                                 <div class="d-flex align-items-center">
-                                    <div class="avatar-circle bg-soft-danger me-2 rounded-circle d-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:12px;">FH</div>
-                                    <span>Fatima Hassan</span>
+                                    <div class="avatar-circle <?= $avatar_bg ?> me-2 rounded-circle d-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:12px;"><?= $initials ?></div>
+                                    <span><?= htmlspecialchars($rec['child_name']) ?></span>
                                 </div>
                             </td>
-                            <td class="px-4 py-3">Hepatitis B</td>
-                            <td class="px-4 py-3"><span class="badge bg-light text-dark border">2nd</span></td>
-                            <td class="px-4 py-3 text-muted small">City General Hospital</td>
+                            <td class="px-4 py-3"><?= htmlspecialchars($rec['vaccine_name']) ?></td>
+                            <td class="px-4 py-3"><span class="badge bg-light text-dark border"><?= $dose_display . $dose_suffix ?></span></td>
+                            <td class="px-4 py-3 text-muted small"><?= htmlspecialchars($rec['hospital_name'] ?? 'Not Assigned') ?></td>
                             <td class="px-4 py-3">
-                                <span class="badge bg-danger-subtle text-danger border border-danger border-opacity-25">Missed</span>
+                                <span class="badge <?= $badge_class ?>"><?= $rec['display_status'] ?></span>
                             </td>
                             <td class="px-4 py-3 text-end">
-                                <button class="btn btn-sm btn-outline-secondary"><i class="fas fa-eye"></i></button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                    data-bs-toggle="modal" 
+                                    data-bs-target="#viewReportModal"
+                                    data-child="<?= htmlspecialchars($rec['child_name']) ?>"
+                                    data-vaccine="<?= htmlspecialchars($rec['vaccine_name']) ?>"
+                                    data-dose="<?= $dose_display . $dose_suffix ?>"
+                                    data-date="<?= date('M d, Y', strtotime($rec['scheduled_date'])) ?>"
+                                    data-hospital="<?= htmlspecialchars($rec['hospital_name'] ?? 'Not Assigned') ?>"
+                                    data-status="<?= $rec['display_status'] ?>"><i class="fas fa-eye"></i></button>
                             </td>
                         </tr>
-
-                        <!-- Row 4 -->
-                        <tr data-child="Sarah Ahmed" data-date="2026-01-15" data-status="Completed">
-                            <td class="px-4 py-3 fw-medium">Jan 15, 2026</td>
-                            <td class="px-4 py-3">
-                                <div class="d-flex align-items-center">
-                                    <div class="avatar-circle bg-soft-primary me-2 rounded-circle d-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:12px;">SA</div>
-                                    <span>Sarah Ahmed</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">BCG</td>
-                            <td class="px-4 py-3"><span class="badge bg-light text-dark border">1st</span></td>
-                            <td class="px-4 py-3 text-muted small">City General Hospital</td>
-                            <td class="px-4 py-3">
-                                <span class="badge bg-success-subtle text-success border border-success border-opacity-25">Completed</span>
-                            </td>
-                            <td class="px-4 py-3 text-end">
-                                <button class="btn btn-sm btn-outline-secondary"><i class="fas fa-eye"></i></button>
-                            </td>
-                        </tr>
-
-                        <!-- Row 5 -->
-                        <tr data-child="Ahmed Ali" data-date="2026-01-05" data-status="Completed">
-                            <td class="px-4 py-3 fw-medium">Jan 05, 2026</td>
-                            <td class="px-4 py-3">
-                                <div class="d-flex align-items-center">
-                                    <div class="avatar-circle bg-soft-success me-2 rounded-circle d-flex align-items-center justify-content-center" style="width:32px;height:32px;font-size:12px;">AA</div>
-                                    <span>Ahmed Ali</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">Pentavalent</td>
-                            <td class="px-4 py-3"><span class="badge bg-light text-dark border">1st</span></td>
-                            <td class="px-4 py-3 text-muted small">Metro Health Center</td>
-                            <td class="px-4 py-3">
-                                <span class="badge bg-success-subtle text-success border border-success border-opacity-25">Completed</span>
-                            </td>
-                            <td class="px-4 py-3 text-end">
-                                <button class="btn btn-sm btn-outline-secondary"><i class="fas fa-eye"></i></button>
-                            </td>
-                        </tr>
+                        <?php endforeach; ?>
+                        <?php if(empty($records)): ?>
+                            <tr><td colspan="7" class="text-center py-4 text-muted">No vaccination records found.</td></tr>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
@@ -409,6 +392,54 @@ include '../includes/sidebar.php';
 
 </div>
 
+<!-- Report Details Modal -->
+<div class="modal fade" id="viewReportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-bottom-0">
+                <h5 class="modal-title fw-bold">Vaccination Record Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 pt-0">
+                <div class="text-center mb-4">
+                    <div class="avatar-lg bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+                        <i class="fas fa-file-medical-alt fs-3"></i>
+                    </div>
+                    <h5 class="fw-bold mb-1" id="modalVaccine"></h5>
+                    <span class="badge bg-light text-dark border" id="modalDose"></span>
+                </div>
+                
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="small text-muted fw-bold text-uppercase">Child Name</label>
+                        <div class="fw-medium text-dark" id="modalChild"></div>
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted fw-bold text-uppercase">Date</label>
+                        <div class="fw-medium text-dark" id="modalDate"></div>
+                    </div>
+                    <div class="col-12">
+                        <label class="small text-muted fw-bold text-uppercase">Hospital</label>
+                        <div class="fw-medium text-dark" id="modalHospital"></div>
+                    </div>
+                    <div class="col-12">
+                        <label class="small text-muted fw-bold text-uppercase">Status</label>
+                        <div id="modalStatus"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top-0">
+                <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4" onclick="window.print()"><i class="fas fa-print me-2"></i>Print</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PDF Generation Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
 <!-- Chart.js Script -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -419,6 +450,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const filterEndDate = document.getElementById('filterEndDate');
     const btnApplyFilters = document.getElementById('btnApplyFilters');
     const searchTable = document.getElementById('searchTable');
+
+    let vaccinationTrendChart; // To hold the chart instance
     
     const tableRows = document.querySelectorAll('#tableBody tr');
     const timelineItems = document.querySelectorAll('#timelineContainer .timeline-item');
@@ -451,6 +484,41 @@ document.addEventListener('DOMContentLoaded', function() {
         statMissed.textContent = missed;
     }
 
+    function updateChart(visibleRecords) {
+        if (!vaccinationTrendChart) return;
+
+        const monthLabels = vaccinationTrendChart.data.labels;
+        const newChartData = {
+            completed: Array(monthLabels.length).fill(0),
+            pending: Array(monthLabels.length).fill(0),
+            missed: Array(monthLabels.length).fill(0)
+        };
+
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+        visibleRecords.forEach(record => {
+            // Add T12:00:00 to avoid timezone issues where new Date() might interpret it as the previous day
+            const recordDate = new Date(record.date + 'T12:00:00');
+            const recordMonth = monthNames[recordDate.getMonth()];
+            const monthIndex = monthLabels.indexOf(recordMonth);
+
+            if (monthIndex !== -1) {
+                if (record.status === 'Completed') {
+                    newChartData.completed[monthIndex]++;
+                } else if (record.status === 'Pending') {
+                    newChartData.pending[monthIndex]++;
+                } else if (record.status === 'Missed') {
+                    newChartData.missed[monthIndex]++;
+                }
+            }
+        });
+
+        vaccinationTrendChart.data.datasets[0].data = newChartData.completed;
+        vaccinationTrendChart.data.datasets[1].data = newChartData.pending;
+        vaccinationTrendChart.data.datasets[2].data = newChartData.missed;
+        vaccinationTrendChart.update();
+    }
+
     function applyFilters() {
         const selectedChild = filterChild.value;
         const startDate = filterStartDate.value ? new Date(filterStartDate.value) : null;
@@ -458,6 +526,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const searchTerm = searchTable.value.toLowerCase();
 
         // Filter Table
+        let visibleRecords = [];
+
         tableRows.forEach(row => {
             const childName = row.getAttribute('data-child');
             const rowDateStr = row.getAttribute('data-date');
@@ -479,6 +549,10 @@ document.addEventListener('DOMContentLoaded', function() {
             if (isVisible && searchTerm && !rowText.includes(searchTerm)) isVisible = false;
 
             row.style.display = isVisible ? '' : 'none';
+
+            if (isVisible) {
+                visibleRecords.push({ date: rowDateStr, status: row.getAttribute('data-status') });
+            }
         });
 
         // Filter Timeline (Similar logic, ignoring search term for simplicity)
@@ -497,6 +571,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         updateStats();
+        updateChart(visibleRecords);
     }
 
     // Event Listeners
@@ -508,6 +583,108 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initial Stats Update
     updateStats();
+
+    // --- Export Logic ---
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
+    const exportPdfBtn = document.getElementById('exportPdfBtn');
+
+    // CSV Export
+    exportCsvBtn.addEventListener('click', function() {
+        const childName = filterChild.value;
+        const startDate = filterStartDate.value;
+        const endDate = filterEndDate.value;
+
+        const queryParams = new URLSearchParams({
+            child_name: childName,
+            start_date: startDate,
+            end_date: endDate
+        });
+
+        window.location.href = `export_csv.php?${queryParams.toString()}`;
+    });
+
+    // PDF Export (Client-side)
+    exportPdfBtn.addEventListener('click', function() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        const table = document.getElementById('vaccinationTable');
+        const visibleRows = Array.from(table.querySelectorAll('tbody tr')).filter(row => row.style.display !== 'none');
+
+        const head = [['Date', 'Child Name', 'Vaccine', 'Dose', 'Hospital', 'Status']];
+        const body = visibleRows.map(row => {
+            const cells = row.querySelectorAll('td');
+            // Extract text from cells, skipping the last one (Action button)
+            return Array.from(cells).slice(0, -1).map(cell => cell.innerText.trim());
+        });
+
+        doc.autoTable({
+            head: head,
+            body: body,
+            startY: 20,
+            didDrawPage: function (data) {
+                doc.setFontSize(20);
+                doc.setTextColor(40);
+                doc.text("Vaccination Report", data.settings.margin.left, 15);
+            }
+        });
+
+        doc.save('vaccination-report.pdf');
+    });
+
+    <?php
+    // Prepare Chart Data (Last 6 Months)
+    $months = [];
+    for ($i = 5; $i >= 0; $i--) {
+        $months[] = date('M', strtotime("-$i months"));
+    }
+
+    $chart_data = [
+        'completed' => array_fill(0, 6, 0),
+        'pending' => array_fill(0, 6, 0),
+        'missed' => array_fill(0, 6, 0)
+    ];
+
+    foreach ($records as $rec) {
+        $rec_month = date('M', strtotime($rec['scheduled_date']));
+        $key = array_search($rec_month, $months);
+        if ($key !== false) {
+            if ($rec['display_status'] == 'Completed') $chart_data['completed'][$key]++;
+            elseif ($rec['display_status'] == 'Pending') $chart_data['pending'][$key]++;
+            elseif ($rec['display_status'] == 'Missed') $chart_data['missed'][$key]++;
+        }
+    }
+    ?>
+
+    // --- Modal Logic ---
+    const reportModal = document.getElementById('viewReportModal');
+    if (reportModal) {
+        reportModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            
+            const child = button.getAttribute('data-child');
+            const vaccine = button.getAttribute('data-vaccine');
+            const dose = button.getAttribute('data-dose');
+            const date = button.getAttribute('data-date');
+            const hospital = button.getAttribute('data-hospital');
+            const status = button.getAttribute('data-status');
+
+            reportModal.querySelector('#modalChild').textContent = child;
+            reportModal.querySelector('#modalVaccine').textContent = vaccine;
+            reportModal.querySelector('#modalDose').textContent = dose;
+            reportModal.querySelector('#modalDate').textContent = date;
+            reportModal.querySelector('#modalHospital').textContent = hospital;
+            
+            const statusContainer = reportModal.querySelector('#modalStatus');
+            if(status === 'Completed') {
+                statusContainer.innerHTML = '<span class="badge bg-success-subtle text-success border border-success border-opacity-25 rounded-pill">Completed</span>';
+            } else if(status === 'Pending') {
+                statusContainer.innerHTML = '<span class="badge bg-warning-subtle text-warning border border-warning border-opacity-25 rounded-pill">Pending</span>';
+            } else {
+                statusContainer.innerHTML = '<span class="badge bg-danger-subtle text-danger border border-danger border-opacity-25 rounded-pill">Missed</span>';
+            }
+        });
+    }
 
     // --- Chart Logic ---
     // Vaccination Trend Chart
@@ -523,14 +700,14 @@ document.addEventListener('DOMContentLoaded', function() {
     gradientPending.addColorStop(0, 'rgba(255, 193, 7, 0.5)');
     gradientPending.addColorStop(1, 'rgba(255, 193, 7, 0.0)');
 
-    new Chart(ctx, {
+    vaccinationTrendChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb'],
+            labels: <?= json_encode($months) ?>,
             datasets: [
                 {
                     label: 'Completed',
-                    data: [5, 8, 12, 15, 20, 32],
+                    data: <?= json_encode($chart_data['completed']) ?>,
                     borderColor: '#198754',
                     backgroundColor: gradientCompleted,
                     borderWidth: 2,
@@ -542,7 +719,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 {
                     label: 'Pending',
-                    data: [2, 3, 4, 6, 8, 10],
+                    data: <?= json_encode($chart_data['pending']) ?>,
                     borderColor: '#ffc107',
                     backgroundColor: gradientPending,
                     borderWidth: 2,
@@ -554,7 +731,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 {
                     label: 'Missed',
-                    data: [0, 1, 1, 2, 2, 3],
+                    data: <?= json_encode($chart_data['missed']) ?>,
                     borderColor: '#dc3545',
                     backgroundColor: 'transparent',
                     borderWidth: 2,

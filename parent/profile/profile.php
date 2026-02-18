@@ -1,27 +1,96 @@
 <?php
-/**
- * Parent Profile Page
- * 
- * Allows the parent to view and edit their personal and security details.
- * Path: parent/profile.php
- */
-
+// Essential includes for authentication, header, sidebar, and database connection
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// Dummy data for the parent's profile
+// Get parent ID from session
+$parent_id = $_SESSION['user_id'];
+
+// Fetch parent profile data
+$stmt_hospitals = $conn->prepare("SELECT p.id AS parent_id, u.name AS parent_name, u.email, p.phone, p.address, p.created_at AS join_date FROM parents p LEFT JOIN users u ON p.user_id = u.id WHERE u.id = ?");
+$stmt_hospitals->bind_param("i", $parent_id);
+$stmt_hospitals->execute();
+$result_hospitals = $stmt_hospitals->get_result();
+$row = $result_hospitals->fetch_assoc();
+
+
+// Prepare parent profile data
 $parent_profile = [
-    'full_name' => 'John Doe',
-    'email' => 'john.doe@example.com',
-    'phone' => '+1 (123) 456-7890',
-    'address' => '123 Health St, Wellness Town',
-    'city' => 'Metropolis',
-    'state' => 'California',
-    'postal_code' => '90210',
-    'join_date' => '2023-01-15',
-    'profile_pic' => 'https://i.pravatar.cc/150?u=johndoe' // Using a placeholder image service
+    'full_name' => $row['parent_name'],
+    'email' => $row['email'],
+    'phone' => $row['phone'],
+    'address' => $row['address'],
+    'join_date' => $row['join_date'],
 ];
+
+$alert_msg = '';
+$alert_type = '';
+
+// Handle Profile Update
+if (isset($_POST['update_profile'])) {
+    $full_name = $_POST['full_name'];
+    $phone = $_POST['phone'];
+    $address = $_POST['address'];
+
+    // Update users table (name)
+    $stmt_u = $conn->prepare("UPDATE users SET name = ? WHERE id = ?");
+    $stmt_u->bind_param("si", $full_name, $parent_id);
+    $stmt_u->execute();
+
+    // Update parents table (phone, address)
+    $stmt_p = $conn->prepare("UPDATE parents SET phone = ?, address = ? WHERE user_id = ?");
+    $stmt_p->bind_param("ssi", $phone, $address, $parent_id);
+    
+    if ($stmt_p->execute()) {
+        $alert_msg = "Profile updated successfully.";
+        $alert_type = "success";
+        // Refresh data
+        $parent_profile['full_name'] = $full_name;
+        $parent_profile['phone'] = $phone;
+        $parent_profile['address'] = $address;
+    } else {
+        $alert_msg = "Error updating profile: " . $conn->error;
+        $alert_type = "danger";
+    }
+}
+
+// Handle Password Update
+if (isset($_POST['update_password'])) {
+    $current_password = $_POST['current_password'];
+    $new_password = $_POST['new_password'];
+    $confirm_password = $_POST['confirm_password'];
+
+    if ($new_password !== $confirm_password) {
+        $alert_msg = "New passwords do not match.";
+        $alert_type = "danger";
+    } else {
+        // Verify current password
+        $stmt_check = $conn->prepare("SELECT password FROM users WHERE id = ?");
+        $stmt_check->bind_param("i", $parent_id);
+        $stmt_check->execute();
+        $res_check = $stmt_check->get_result();
+        $user_data = $res_check->fetch_assoc();
+
+        if ($user_data && password_verify($current_password, $user_data['password'])) {
+            $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
+            $stmt_pass = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+            $stmt_pass->bind_param("si", $new_hash, $parent_id);
+            
+            if ($stmt_pass->execute()) {
+                $alert_msg = "Password changed successfully.";
+                $alert_type = "success";
+            } else {
+                $alert_msg = "Error updating password.";
+                $alert_type = "danger";
+            }
+        } else {
+            $alert_msg = "Incorrect current password.";
+            $alert_type = "danger";
+        }
+    }
+}
 
 ?>
 
@@ -44,6 +113,14 @@ $parent_profile = [
         </div>
     </div>
 
+    <?php if($alert_msg): ?>
+    <div class="alert alert-<?= $alert_type ?> alert-dismissible fade show border-0 shadow-sm rounded-3" role="alert">
+        <i class="fas fa-<?= $alert_type == 'success' ? 'check-circle' : 'exclamation-circle' ?> me-2"></i>
+        <?= $alert_msg ?>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    <?php endif; ?>
+
     <div class="row g-4">
 
         <!-- Personal Details Form Card -->
@@ -59,33 +136,33 @@ $parent_profile = [
                 </div>
             </div>
             <div class="card-body p-4">
-                <form id="profileForm">
+                <form id="profileForm" method="POST">
                     <div class="row g-3">
                         <!-- Full Name -->
                         <div class="col-md-6">
                             <label for="fullName" class="form-label">Full Name</label>
-                            <input type="text" class="form-control" id="fullName" value="<?= htmlspecialchars($parent_profile['full_name']) ?>" disabled>
+                            <input type="text" class="form-control" id="fullName" name="full_name" value="<?= htmlspecialchars($parent_profile['full_name']) ?>" disabled required>
                         </div>
                         <!-- Email Address (Read-only) -->
                         <div class="col-md-6">
                             <label for="email" class="form-label">Email Address</label>
-                            <input type="email" class="form-control" id="email" value="<?= htmlspecialchars($parent_profile['email']) ?>" readonly>
+                            <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($parent_profile['email']) ?>" readonly>
                         </div>
                         <!-- Phone Number -->
                         <div class="col-md-6">
                             <label for="phone" class="form-label">Phone Number</label>
-                            <input type="tel" class="form-control" id="phone" value="<?= htmlspecialchars($parent_profile['phone']) ?>" disabled>
+                            <input type="tel" class="form-control" id="phone" name="phone" value="<?= htmlspecialchars($parent_profile['phone']) ?>" disabled required>
                         </div>
                         <!-- Address -->
                         <div class="col-12">
                             <label for="address" class="form-label">Address</label>
-                            <input type="text" class="form-control" id="address" value="<?= htmlspecialchars($parent_profile['address']) ?>" disabled>
+                            <input type="text" class="form-control" id="address" name="address" value="<?= htmlspecialchars($parent_profile['address']) ?>" disabled required>
                         </div>
                     </div>
                     <!-- Action Buttons (Hidden by default) -->
                     <div class="mt-4 text-end d-none" id="formActions">
                         <button type="button" class="btn btn-light me-2" id="cancelBtn">Cancel</button>
-                        <button type="submit" class="btn btn-primary" id="saveBtn">Save Changes</button>
+                        <button type="submit" class="btn btn-primary" id="saveBtn" name="update_profile">Save Changes</button>
                     </div>
                 </form>
             </div>
@@ -99,23 +176,23 @@ $parent_profile = [
                 </h5>
             </div>
             <div class="card-body p-4">
-                <form id="passwordForm">
+                <form id="passwordForm" method="POST">
                     <div class="row g-3">
                         <div class="col-md-12">
                             <label for="currentPassword" class="form-label">Current Password</label>
-                            <input type="password" class="form-control" id="currentPassword" placeholder="Enter your current password">
+                            <input type="password" class="form-control" id="currentPassword" name="current_password" placeholder="Enter your current password" required>
                         </div>
                         <div class="col-md-6">
                             <label for="newPassword" class="form-label">New Password</label>
-                            <input type="password" class="form-control" id="newPassword" placeholder="Enter new password">
+                            <input type="password" class="form-control" id="newPassword" name="new_password" placeholder="Enter new password" required>
                         </div>
                         <div class="col-md-6">
                             <label for="confirmPassword" class="form-label">Confirm New Password</label>
-                            <input type="password" class="form-control" id="confirmPassword" placeholder="Confirm new password">
+                            <input type="password" class="form-control" id="confirmPassword" name="confirm_password" placeholder="Confirm new password" required>
                         </div>
                     </div>
                     <div class="mt-4">
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" class="btn btn-primary" name="update_password">
                             <i class="fas fa-key me-2"></i>Change Password
                         </button>
                     </div>
@@ -162,41 +239,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // "Cancel" button click event
     cancelBtn.addEventListener('click', () => toggleEditMode(false));
 
-    // "Save Changes" form submission
-    profileForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        // In a real application, you would send data to the server via AJAX.
-        
-        // For this demo, we'll just show an alert and disable the form.
-        alert('Profile updated successfully!');
-        
-        // Update original values to the new saved values
-        formInputs.forEach(input => {
-            originalValues[input.id] = input.value;
-        });
-
-        toggleEditMode(false);
-    });
+    // Profile form submission handled by PHP
 
     // "Change Password" form submission
     document.getElementById('passwordForm').addEventListener('submit', function(e) {
-        e.preventDefault();
         const newPassword = document.getElementById('newPassword').value;
         const confirmPassword = document.getElementById('confirmPassword').value;
 
         if (newPassword !== confirmPassword) {
+            e.preventDefault();
             alert('New password and confirmation do not match.');
             return;
         }
 
         if (newPassword.length > 0 && newPassword.length < 8) {
+            e.preventDefault();
             alert('Password must be at least 8 characters long.');
             return;
         }
-
-        // For this demo, we'll just show an alert.
-        alert('Password changed successfully!');
-        this.reset(); // Clear the password form fields
     });
 });
 </script>

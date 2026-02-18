@@ -1,67 +1,82 @@
 <?php
-/**
- * Vaccine Availability List
- * 
- * Purpose: View all pre-defined vaccines and manage availability status.
- * Admin CANNOT add new vaccines.
- */
-
 // Reusable Includes
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
+// Fetch vaccines from database
+$stmt_vaccines = $conn->prepare("SELECT * FROM vaccines");
+$stmt_vaccines->execute();
+$result_vaccines = $stmt_vaccines->get_result();
+
+// Check if vaccines exist and fetch as associative array
+if ($result_vaccines->num_rows > 0) {
+    while($vaccine = $result_vaccines->fetch_assoc()) {
+        $vaccines[] = [
+            'id' => $vaccine['id'],
+            'name' => $vaccine['vaccine_name'],
+            'age_group' => $vaccine['target_age_group'],
+            'doses' => $vaccine['total_dose'],
+            'status' => $vaccine['availability_status'],
+            'created_at' => date('M d, Y h:i A', strtotime($vaccine['created_at']))
+        ];
+    }   
+}
+
+
+
 // Dummy Vaccine Data (Simulating database records)
-$vaccines = [
-    [
-        'id' => 'VAC001',
-        'name' => 'BCG',
-        'age_group' => 'At Birth',
-        'doses' => 1,
-        'status' => 'Available',
-        'updated_at' => 'Feb 01, 2026 10:30 AM'
-    ],
-    [
-        'id' => 'VAC002',
-        'name' => 'OPV (Oral Polio Vaccine)',
-        'age_group' => '0-5 Years',
-        'doses' => 4,
-        'status' => 'Available',
-        'updated_at' => 'Jan 25, 2026 02:15 PM'
-    ],
-    [
-        'id' => 'VAC003',
-        'name' => 'Pentavalent',
-        'age_group' => '6, 10, 14 Weeks',
-        'doses' => 3,
-        'status' => 'Unavailable',
-        'updated_at' => 'Feb 03, 2026 09:00 AM'
-    ],
-    [
-        'id' => 'VAC004',
-        'name' => 'PCV (Pneumococcal)',
-        'age_group' => '6, 10, 14 Weeks',
-        'doses' => 3,
-        'status' => 'Available',
-        'updated_at' => 'Jan 30, 2026 11:45 AM'
-    ],
-    [
-        'id' => 'VAC005',
-        'name' => 'Measles',
-        'age_group' => '9 Months',
-        'doses' => 2,
-        'status' => 'Available',
-        'updated_at' => 'Feb 02, 2026 04:20 PM'
-    ],
-    [
-        'id' => 'VAC006',
-        'name' => 'Hepatitis B',
-        'age_group' => 'At Birth',
-        'doses' => 1,
-        'status' => 'Available',
-        'updated_at' => 'Jan 20, 2026 09:00 AM'
-    ]
-];
+// $vaccines = [
+//     [
+//         'id' => 'VAC001',
+//         'name' => 'BCG',
+//         'age_group' => 'At Birth',
+//         'doses' => 1,
+//         'status' => 'Available',
+//         'updated_at' => 'Feb 01, 2026 10:30 AM'
+//     ],
+//     [
+//         'id' => 'VAC002',
+//         'name' => 'OPV (Oral Polio Vaccine)',
+//         'age_group' => '0-5 Years',
+//         'doses' => 4,
+//         'status' => 'Available',
+//         'updated_at' => 'Jan 25, 2026 02:15 PM'
+//     ],
+//     [
+//         'id' => 'VAC003',
+//         'name' => 'Pentavalent',
+//         'age_group' => '6, 10, 14 Weeks',
+//         'doses' => 3,
+//         'status' => 'Unavailable',
+//         'updated_at' => 'Feb 03, 2026 09:00 AM'
+//     ],
+//     [
+//         'id' => 'VAC004',
+//         'name' => 'PCV (Pneumococcal)',
+//         'age_group' => '6, 10, 14 Weeks',
+//         'doses' => 3,
+//         'status' => 'Available',
+//         'updated_at' => 'Jan 30, 2026 11:45 AM'
+//     ],
+//     [
+//         'id' => 'VAC005',
+//         'name' => 'Measles',
+//         'age_group' => '9 Months',
+//         'doses' => 2,
+//         'status' => 'Available',
+//         'updated_at' => 'Feb 02, 2026 04:20 PM'
+//     ],
+//     [
+//         'id' => 'VAC006',
+//         'name' => 'Hepatitis B',
+//         'age_group' => 'At Birth',
+//         'doses' => 1,
+//         'status' => 'Available',
+//         'updated_at' => 'Jan 20, 2026 09:00 AM'
+//     ]
+// ];
 ?>
 
 <!-- ============================================
@@ -102,8 +117,8 @@ $vaccines = [
                     <div class="col-md-4">
                         <select id="statusFilter" class="form-select">
                             <option value="">All Statuses</option>
-                            <option value="Available">Available</option>
-                            <option value="Unavailable">Unavailable</option>
+                            <option value="available">Available</option>
+                            <option value="unavailable">Unavailable</option>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -127,9 +142,9 @@ $vaccines = [
                                 <th class="px-4 py-3 text-muted text-uppercase small fw-bold">Vaccine Name</th>
                                 <th class="px-4 py-3 text-muted text-uppercase small fw-bold">Age Group</th>
                                 <th class="px-4 py-3 text-muted text-uppercase small fw-bold text-center">Dose Count</th>
-                                <th class="px-4 py-3 text-muted text-uppercase small fw-bold">Status</th>
-                                <th class="px-4 py-3 text-muted text-uppercase small fw-bold">Last Updated</th>
-                                <th class="px-4 py-3 text-muted text-uppercase small fw-bold text-end">Action</th>
+                                <th class="px-4 py-3 text-muted text-uppercase small fw-bold text-center">Status</th>
+                                <th class="px-4 py-3 text-muted text-uppercase small fw-bold">Created At</th>
+                                <th class="px-4 py-3 text-muted text-uppercase small fw-bold text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody id="vaccineTableBody">
@@ -151,7 +166,7 @@ $vaccines = [
                                     <span class="badge rounded-pill bg-info bg-opacity-10 text-info px-3"><?= $vaccine['doses'] ?></span>
                                 </td>
                                 <td class="px-4">
-                                    <?php if ($vaccine['status'] == 'Available'): ?>
+                                    <?php if ($vaccine['status'] == 'available'): ?>
                                         <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill px-3 py-2">
                                             <i class="fas fa-check-circle me-1"></i> Available
                                         </span>
@@ -162,11 +177,10 @@ $vaccines = [
                                     <?php endif; ?>
                                 </td>
                                 <td class="px-4">
-                                    <div class="small text-muted"><?= $vaccine['updated_at'] ?></div>
+                                    <div class="small text-muted"><?= $vaccine['created_at'] ?></div>
                                 </td>
                                 <td class="px-4 text-end">
-                                    <a href="update_vaccine_status.php?id=<?= $vaccine['id'] ?>&name=<?= urlencode($vaccine['name']) ?>&age=<?= urlencode($vaccine['age_group']) ?>&doses=<?= $vaccine['doses'] ?>&status=<?= $vaccine['status'] ?>" 
-                                       class="btn btn-sm btn-white border shadow-sm rounded-pill px-3">
+                                    <a href="update_vaccine_status.php?id=<?= $vaccine['id'] ?>" class="btn btn-sm btn-white border shadow-sm rounded-pill px-3">
                                         <i class="fas fa-sync-alt me-1 text-primary"></i> 
                                         Update Status
                                     </a>
@@ -178,7 +192,7 @@ $vaccines = [
                 </div>
             </div>
             
-            <!-- Pagination UI (Static for UI Demo) -->
+            <!-- Pagination -->
             <div class="card-footer bg-white border-0 py-3 rounded-bottom-4">
                 <div class="d-flex align-items-center justify-content-between">
                     <div class="small text-muted">

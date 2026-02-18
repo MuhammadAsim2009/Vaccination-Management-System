@@ -1,99 +1,61 @@
 <?php
-/**
- * Vaccine List Page
- * Hospital Panel - Vaccination Management System
- * 
- * Displays the list of available vaccines in the hospital inventory
- * with options to view, edit, and delete (frontend simulation).
- */
-
+// Reuseable includes
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// Dummy Data for UI Simulation
-$vaccines = [
-    [
-        'id' => 1,
-        'name' => 'BCG Vaccine',
-        'code' => 'VAC-001',
-        'manufacturer' => 'Serum Institute',
-        'age_group' => 'At Birth',
-        'doses' => 1,
-        'status' => 'Available',
-        'description' => 'Primary vaccine for Tuberculosis.'
-    ],
-    [
-        'id' => 2,
-        'name' => 'OPV (Oral Polio)',
-        'code' => 'VAC-002',
-        'manufacturer' => 'Sanofi Pasteur',
-        'age_group' => '0-5 Years',
-        'doses' => 4,
-        'status' => 'Available',
-        'description' => 'Oral Polio Vaccine to prevent poliomyelitis.'
-    ],
-    [
-        'id' => 3,
-        'name' => 'Pentavalent',
-        'code' => 'VAC-003',
-        'manufacturer' => 'GSK',
-        'age_group' => '6, 10, 14 Weeks',
-        'doses' => 3,
-        'status' => 'Available',
-        'description' => 'Protects against Diphtheria, Pertussis, Tetanus, Hepatitis B and Hib.'
-    ],
-    [
-        'id' => 4,
-        'name' => 'Rotavirus',
-        'code' => 'VAC-004',
-        'manufacturer' => 'Bharat Biotech',
-        'age_group' => '6, 10 Weeks',
-        'doses' => 2,
-        'status' => 'Unavailable',
-        'description' => 'Prevents rotavirus infections, the leading cause of severe diarrhea.'
-    ],
-    [
-        'id' => 5,
-        'name' => 'Measles',
-        'code' => 'VAC-005',
-        'manufacturer' => 'Merck',
-        'age_group' => '9 Months',
-        'doses' => 2,
-        'status' => 'Available',
-        'description' => 'Highly effective vaccine against measles.'
-    ],
-    [
-        'id' => 6,
-        'name' => 'Hepatitis B',
-        'code' => 'VAC-006',
-        'manufacturer' => 'Pfizer',
-        'age_group' => 'At Birth',
-        'doses' => 3,
-        'status' => 'Available',
-        'description' => 'Prevents Hepatitis B virus infection.'
-    ],
-    [
-        'id' => 7,
-        'name' => 'Typhoid Conjugate',
-        'code' => 'VAC-007',
-        'manufacturer' => 'Typbar TCV',
-        'age_group' => '6 Months+',
-        'doses' => 1,
-        'status' => 'Unavailable',
-        'description' => 'Protection against Salmonella Typhi.'
-    ]
-];
+// Fetch data from datebase
+$stmt_vaccine = $conn->prepare("SELECT * FROM vaccines");
+$stmt_vaccine->execute();
+$result_vaccine = $stmt_vaccine->get_result();
+
+$vaccines = [];
+if ($result_vaccine->num_rows > 0) {
+    while ($row = $result_vaccine->fetch_assoc()) {
+        $vaccines[] = [
+            'id' => $row['id'],
+            'name' => $row['vaccine_name'],
+            'age_group' => $row['target_age_group'],
+            'doses' => $row['total_dose'] ?? 1,
+            'status' => ucfirst($row['availability_status']),
+            'description' => $row['description'],
+            'created_at' => date('M d, Y', strtotime($row['created_at']))
+        ];
+    }
+}
 
 // Calculate Stats
 $total_vaccines = count($vaccines);
 $available_vaccines = count(array_filter($vaccines, fn($v) => $v['status'] === 'Available'));
 $unavailable_vaccines = $total_vaccines - $available_vaccines;
+
+// Delete Vaccine
+$delete_msg = '';
+$delete_type = '';
+
+if(isset($_POST['delete_btn'])) {
+    $vaccine_id = $_POST['vaccine_id'];
+    
+    $stmt_delete = $conn->prepare("DELETE FROM vaccines WHERE id = ?");
+    $stmt_delete->bind_param("i", $vaccine_id);
+    if($stmt_delete->execute()) {
+        $delete_msg = "Vaccine deleted successfully.";
+        $delete_type = "success";
+    } else {
+        $delete_msg = "Error deleting vaccine: " . $conn->error;
+        $delete_type = "danger";
+    }
+}
+
 ?>
 
 <!-- Main Content -->
 <main class="mt-5 pt-3">
     <div class="container-fluid">
+
+        <!-- Alert Placeholder -->
+        <div id="alertPlaceholder"></div>
 
         <!-- 1. Page Header -->
         <div class="row mb-4">
@@ -185,7 +147,7 @@ $unavailable_vaccines = $total_vaccines - $available_vaccines;
                         <label for="searchInput" class="form-label fw-bold small text-muted">Search Vaccine</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i class="fas fa-search text-muted"></i></span>
-                            <input type="text" class="form-control bg-light border-start-0" id="searchInput" placeholder="Search by name, code or manufacturer...">
+                            <input type="text" class="form-control bg-light border-start-0" id="searchInput" placeholder="Search by id, name, or age group...">
                         </div>
                     </div>
                     <div class="col-md-4">
@@ -218,11 +180,10 @@ $unavailable_vaccines = $total_vaccines - $available_vaccines;
                             <tr>
                                 <th class="ps-4">ID</th>
                                 <th>Vaccine Name</th>
-                                <th>Code</th>
-                                <th>Manufacturer</th>
                                 <th>Age Group</th>
                                 <th class="text-center">Doses</th>
                                 <th class="text-center">Status</th>
+                                <th>Created At</th>
                                 <th class="text-end pe-4">Actions</th>
                             </tr>
                         </thead>
@@ -238,8 +199,6 @@ $unavailable_vaccines = $total_vaccines - $available_vaccines;
                                         <span class="fw-semibold vaccine-name"><?= $vaccine['name'] ?></span>
                                     </div>
                                 </td>
-                                <td class="text-muted small vaccine-code"><?= $vaccine['code'] ?></td>
-                                <td class="vaccine-manufacturer"><?= $vaccine['manufacturer'] ?></td>
                                 <td><span class="badge bg-light text-dark border"><?= $vaccine['age_group'] ?></span></td>
                                 <td class="text-center fw-bold"><?= $vaccine['doses'] ?></td>
                                 <td class="text-center">
@@ -249,6 +208,7 @@ $unavailable_vaccines = $total_vaccines - $available_vaccines;
                                         <span class="badge bg-soft-danger text-danger rounded-pill px-3">Unavailable</span>
                                     <?php endif; ?>
                                 </td>
+                                <td class="text-muted small vaccine-created_at"><?= $vaccine['created_at'] ?></td>
                                 <td class="text-end pe-4">
                                     <button class="btn btn-sm btn-outline-primary me-1" 
                                             data-bs-toggle="modal" 
@@ -259,7 +219,7 @@ $unavailable_vaccines = $total_vaccines - $available_vaccines;
                                     <a href="update_vaccine.php?id=<?= $vaccine['id'] ?>" class="btn btn-sm btn-outline-secondary me-1" title="Edit">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                                    <button class="btn btn-sm btn-outline-danger"  data-bs-toggle="modal" data-bs-target="#deleteModal" onclick="document.getElementById('DeleteVaccineId').value = <?= $vaccine['id'] ?>">
                                         <i class="fas fa-trash-alt"></i>
                                     </button>
                                 </td>
@@ -301,13 +261,13 @@ $unavailable_vaccines = $total_vaccines - $available_vaccines;
                         <i class="fas fa-vial fs-2"></i>
                     </div>
                     <h4 class="fw-bold mb-1" id="modalVaccineName">Vaccine Name</h4>
-                    <span class="badge bg-light text-muted border" id="modalVaccineCode">CODE</span>
+                    <span class="badge bg-light text-muted border" id="modalVaccineId">Vaccine Id</span>
                 </div>
                 <div class="row g-3">
-                    <div class="col-6"><small class="text-muted text-uppercase fw-bold">Manufacturer</small><div class="fw-medium" id="modalManufacturer">-</div></div>
                     <div class="col-6"><small class="text-muted text-uppercase fw-bold">Age Group</small><div class="fw-medium" id="modalAgeGroup">-</div></div>
                     <div class="col-6"><small class="text-muted text-uppercase fw-bold">Doses Required</small><div class="fw-medium" id="modalDoses">-</div></div>
                     <div class="col-6"><small class="text-muted text-uppercase fw-bold">Current Status</small><div class="fw-medium" id="modalStatus">-</div></div>
+                    <div class="col-6"><small class="text-muted text-uppercase fw-bold">Created At</small><div class="fw-medium" id="modalCreatedAt">-</div></div>
                     <div class="col-12"><small class="text-muted text-uppercase fw-bold">Description</small><p class="small text-muted mb-0" id="modalDescription">-</p></div>
                 </div>
             </div>
@@ -330,7 +290,10 @@ $unavailable_vaccines = $total_vaccines - $available_vaccines;
                 <p class="text-muted small mb-4">Are you sure you want to delete this vaccine from the inventory? This action cannot be undone.</p>
                 <div class="d-flex justify-content-center gap-2">
                     <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger rounded-pill px-4">Delete</button>
+                    <form method="post">
+                        <input type="hidden" name="vaccine_id" id="DeleteVaccineId">
+                        <button type="submit" name="delete_btn" class="btn btn-danger rounded-pill px-4">Delete</button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -351,11 +314,11 @@ $unavailable_vaccines = $total_vaccines - $available_vaccines;
 
             tableRows.forEach(row => {
                 const name = row.querySelector('.vaccine-name').textContent.toLowerCase();
-                const code = row.querySelector('.vaccine-code').textContent.toLowerCase();
-                const manufacturer = row.querySelector('.vaccine-manufacturer').textContent.toLowerCase();
+                const id = row.cells[0].textContent.toLowerCase();
+                const age = row.cells[2].textContent.toLowerCase();
                 const status = row.getAttribute('data-status');
 
-                const matchesSearch = name.includes(searchTerm) || code.includes(searchTerm) || manufacturer.includes(searchTerm);
+                const matchesSearch = name.includes(searchTerm) || id.includes(searchTerm) || age.includes(searchTerm);
                 const matchesStatus = statusValue === 'all' || status === statusValue;
 
                 if (matchesSearch && matchesStatus) {
@@ -379,11 +342,11 @@ $unavailable_vaccines = $total_vaccines - $available_vaccines;
     // Populate View Modal
     function populateViewModal(vaccine) {
         document.getElementById('modalVaccineName').textContent = vaccine.name;
-        document.getElementById('modalVaccineCode').textContent = vaccine.code;
-        document.getElementById('modalManufacturer').textContent = vaccine.manufacturer;
+        document.getElementById('modalVaccineId').textContent = '#' + vaccine.id;
         document.getElementById('modalAgeGroup').textContent = vaccine.age_group;
         document.getElementById('modalDoses').textContent = vaccine.doses;
         document.getElementById('modalStatus').textContent = vaccine.status;
+        document.getElementById('modalCreatedAt').textContent = vaccine.created_at;
         document.getElementById('modalDescription').textContent = vaccine.description;
         
         // Color code status in modal
@@ -393,6 +356,39 @@ $unavailable_vaccines = $total_vaccines - $available_vaccines;
         } else {
             statusEl.className = 'fw-bold text-danger';
         }
+    }
+
+    // Alert Logic
+    const alertMsg = <?= json_encode($delete_msg) ?>;
+    const alertType = <?= json_encode($delete_type) ?>;
+    
+    if(alertMsg) {
+        showAlert(alertMsg, alertType);
+    }
+
+    function showAlert(message, type) {
+        const placeholder = document.getElementById('alertPlaceholder');
+        if(!placeholder) return;
+        
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = [
+            `<div class="alert alert-${type} alert-dismissible fade show border-0 shadow-sm rounded-3 py-3" role="alert">`,
+            `   <div class="d-flex align-items-center">`,
+            `       <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} fs-4 me-3"></i>`,
+            `       <div>${message}</div>`,
+            `   </div>`,
+            '   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
+            '</div>'
+        ].join('');
+        
+        placeholder.append(wrapper);
+        
+        // Auto dismiss after 5 seconds
+        setTimeout(() => {
+            if (wrapper.parentNode) {
+                wrapper.remove();
+            }
+        }, 5000);
     }
 </script>
 

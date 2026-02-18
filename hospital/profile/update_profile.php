@@ -1,36 +1,101 @@
 <?php
-/**
- * Update Hospital Profile Page
- * Hospital Panel - Vaccination Management System
- * 
- * This page allows hospital administrators to view and update their
- * facility's profile information, logo, and security settings.
- * All data is static for frontend demonstration purposes.
- * 
- * @path /hospital/profile/update_profile.php
- */
-
-// Essential includes for authentication, header, sidebar, and footer
+// Essential includes for authentication, header, sidebar, and database connection
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// --- DUMMY DATA SIMULATION ---
-// In a real application, this data would be fetched from the database
-// based on the logged-in hospital's session ID.
+// Get hospital ID from session
+$id = $_SESSION['user_id'];
+
+// Fetch hospital profile data
+$stmt_hospitals = $conn->prepare("SELECT h.id AS hospital_id, h.hospital_name, h.registration_no, u.email, h.phone, h.address, h.status FROM hospitals h LEFT JOIN users u ON h.user_id = u.id WHERE u.id = ?");
+$stmt_hospitals->bind_param("i", $id);
+$stmt_hospitals->execute();
+$result_hospitals = $stmt_hospitals->get_result();
+$row = $result_hospitals->fetch_assoc();
+
+// Prepare hospital profile data for easy access in the form
 $hospital_profile = [
-    'name' => 'City General Hospital',
-    'registration_no' => 'HSP-LHR-12345',
-    'email' => 'contact@citygeneral.com',
-    'phone' => '+92 300 1234567',
-    'website' => 'https://citygeneral.com',
-    'address' => '123 Health St, Medical District',
-    'city' => 'Larkana',
-    'country' => 'Pakistan',
-    'username' => 'citygeneral_admin',
-    'status' => 'Active',
-    'logo' => 'https://ui-avatars.com/api/?name=City+Hospital&background=0D6EFD&color=fff&size=128&bold=true'
+    'hospital_id' => $row['hospital_id'],
+    'name' => $row['hospital_name'],
+    'registration_no' => $row['registration_no'],
+    'email' => $row['email'],
+    'phone' => $row['phone'],
+    'address' => $row['address'],
+    'username' => $row['email'],
+    'status' => $row['status'],
+    'user_status' => $row['status']
 ];
+
+$alert_msg = '';
+$alert_type = '';
+
+// Handle form submission for profile update
+if(isset($_POST['update_btn'])) {
+    // Get form data
+    $hospital_id = $_POST['hospital_id'];
+    $hospital_name = $_POST['hospital_name'];
+    $phone = $_POST['phone'];
+    $address = $_POST['address'];
+
+    // Update hospital profile in the database
+    $stmt_update = $conn->prepare("UPDATE hospitals SET hospital_name = ?, phone = ?, address = ? WHERE id = ?");
+    $stmt_update->bind_param("sssi", $hospital_name, $phone, $address, $hospital_id);
+    if($stmt_update->execute()) {
+        $alert_msg = "Profile updated successfully.";
+        $alert_type = "success";
+        // Update local array to reflect changes immediately
+        $hospital_profile['name'] = $hospital_name;
+        $hospital_profile['phone'] = $phone;
+        $hospital_profile['address'] = $address;
+    } else {
+        $alert_msg = "Error updating profile: " . $conn->error;
+        $alert_type = "danger";
+    }
+}
+
+// Update password logic
+if(isset($_POST['update_password_btn'])) {
+    // Get form data
+    $current_password = $_POST['current_password'];
+    $new_password = $_POST['new_password'];
+    $confirm_password = $_POST['confirm_password'];
+
+    // Validate new password and confirmation
+    if($new_password !== $confirm_password) {
+        $alert_msg = "Passwords do not match.";
+        $alert_type = "danger";
+    } else {
+        // Fetch current password hash from database
+        $check_password = $conn->prepare("SELECT password FROM users WHERE id = ?");
+        $check_password->bind_param("i", $id);
+        $check_password->execute();
+        $result_password = $check_password->get_result();
+        $row = $result_password->fetch_assoc();
+
+        // Verify current password
+        if(password_verify($current_password, $row['password'])) {
+            // Hash new password and update in database
+            $new_password_hash = password_hash($new_password, PASSWORD_DEFAULT);
+            $update_password = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+            $update_password->bind_param("si", $new_password_hash, $id);
+            if($update_password->execute()) {
+                $alert_msg = "Password updated successfully.";
+                $alert_type = "success";
+            } else {
+                $alert_msg = "Error updating password: " . $conn->error;
+                $alert_type = "danger";
+            }
+        } else {
+            $alert_msg = "Current password is incorrect.";
+            $alert_type = "danger";
+        }
+
+    }
+}
+
+
 ?>
 
 <!-- Main Content -->
@@ -63,18 +128,11 @@ $hospital_profile = [
 
         <!-- UI Alerts Placeholder -->
         <div class="row">
-            <div class="col-12">
-                <div id="successAlert" class="alert alert-success d-none alert-dismissible fade show shadow-sm rounded-4 border-0" role="alert">
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-check-circle fs-4 me-3"></i>
-                        <div><strong>Success!</strong> Your profile has been updated. (UI Mockup)</div>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            </div>
+            <div class="col-12" id="alertPlaceholder"></div>
         </div>
 
-        <form id="updateProfileForm" class="needs-validation" novalidate>
+        <form id="updateProfileForm" class="needs-validation" method="POST" novalidate>
+            <input type="hidden" name="hospital_id" value="<?= htmlspecialchars($hospital_profile['hospital_id']) ?>">
             <div class="row g-4">
 
                 <!-- Left Column: Profile & Security Forms -->
@@ -89,49 +147,33 @@ $hospital_profile = [
                                 <!-- Basic Info -->
                                 <div class="col-md-6">
                                     <label for="hospitalName" class="form-label fw-semibold">Hospital Name <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="hospitalName" value="<?= htmlspecialchars($hospital_profile['name']) ?>" required>
+                                    <input type="text" class="form-control" id="hospitalName" name="hospital_name" value="<?= htmlspecialchars($hospital_profile['name']) ?>" required>
                                     <div class="invalid-feedback">Hospital name is required.</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="regNumber" class="form-label fw-semibold">Registration Number</label>
-                                    <input type="text" class="form-control bg-light" id="regNumber" value="<?= htmlspecialchars($hospital_profile['registration_no']) ?>" readonly>
+                                    <input type="text" class="form-control bg-light" name="reg_no" id="regNumber" value="<?= htmlspecialchars($hospital_profile['registration_no']) ?>" readonly>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="email" class="form-label fw-semibold">Email Address <span class="text-danger">*</span></label>
-                                    <input type="email" class="form-control" id="email" value="<?= htmlspecialchars($hospital_profile['email']) ?>" required>
+                                    <input type="email" class="form-control bg-light" id="email" value="<?= htmlspecialchars($hospital_profile['email']) ?>" readonly>
                                     <div class="invalid-feedback">Please enter a valid email.</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="phone" class="form-label fw-semibold">Phone Number <span class="text-danger">*</span></label>
-                                    <input type="tel" class="form-control" id="phone" value="<?= htmlspecialchars($hospital_profile['phone']) ?>" required>
-                                </div>
-                                <div class="col-md-12">
-                                    <label for="website" class="form-label fw-semibold">Website URL</label>
-                                    <input type="url" class="form-control" id="website" value="<?= htmlspecialchars($hospital_profile['website']) ?>">
+                                    <input type="tel" class="form-control" id="phone" name="phone" value="<?= htmlspecialchars($hospital_profile['phone']) ?>" required>
                                 </div>
 
                                 <!-- Address Info -->
-                                <div class="col-md-6">
-                                    <label for="city" class="form-label fw-semibold">City</label>
-                                    <input type="text" class="form-control" id="city" value="<?= htmlspecialchars($hospital_profile['city']) ?>">
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="country" class="form-label fw-semibold">Country</label>
-                                    <select class="form-select" id="country">
-                                        <option value="Pakistan" <?= $hospital_profile['country'] == 'Pakistan' ? 'selected' : '' ?>>Pakistan</option>
-                                        <option value="India" <?= $hospital_profile['country'] == 'India' ? 'selected' : '' ?>>India</option>
-                                        <option value="Bangladesh" <?= $hospital_profile['country'] == 'Bangladesh' ? 'selected' : '' ?>>Bangladesh</option>
-                                    </select>
-                                </div>
                                 <div class="col-12">
                                     <label for="address" class="form-label fw-semibold">Full Address</label>
-                                    <textarea class="form-control" id="address" rows="2"><?= htmlspecialchars($hospital_profile['address']) ?></textarea>
+                                    <textarea class="form-control" id="address" name="address" rows="2"><?= htmlspecialchars($hospital_profile['address']) ?></textarea>
                                 </div>
 
                                 <!-- Account Info -->
                                 <div class="col-md-6">
                                     <label for="username" class="form-label fw-semibold">Username</label>
-                                    <input type="text" class="form-control bg-light" id="username" value="<?= htmlspecialchars($hospital_profile['username']) ?>" readonly>
+                                    <input type="text" class="form-control bg-light" name="username" id="username" value="<?= htmlspecialchars($hospital_profile['username']) ?>" readonly>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold">Account Status</label>
@@ -148,7 +190,7 @@ $hospital_profile = [
                                 <button type="reset" class="btn btn-outline-secondary btn-md px-4">
                                     <i class="fas fa-undo me-2"></i>Reset Changes
                                 </button>
-                                <button type="submit" class="btn btn-primary btn-md fw-bold px-4 ms-2">
+                                <button type="submit" name="update_btn" class="btn btn-primary btn-md fw-bold px-4 ms-2">
                                     <i class="fas fa-save me-2"></i>Update Profile
                                 </button>
                             </div>
@@ -167,33 +209,29 @@ $hospital_profile = [
                                     <label for="currentPassword" class="form-label fw-semibold">Current Password</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-end-0"><i class="fas fa-lock text-muted"></i></span>
-                                        <input type="password" class="form-control border-start-0" id="currentPassword" placeholder="Enter your current password">
+                                        <input type="password" class="form-control border-start-0" name="current_password" id="currentPassword" placeholder="Enter your current password">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="newPassword" class="form-label fw-semibold">New Password</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-end-0"><i class="fas fa-key text-muted"></i></span>
-                                        <input type="password" class="form-control border-start-0" id="newPassword" placeholder="Enter new password">
+                                        <input type="password" class="form-control border-start-0" name="new_password" id="newPassword" placeholder="Enter new password">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="confirmPassword" class="form-label fw-semibold">Confirm New Password</label>
-                                    <input type="password" class="form-control" id="confirmPassword" placeholder="Confirm new password">
+                                    <input type="password" class="form-control" name="confirm_password" id="confirmPassword" placeholder="Confirm new password">
                                 </div>
                                 <div class="col-12">
-                                    <button type="button" class="btn btn-outline-danger rounded-pill px-4">
+                                    <button type="submit" name="update_password_btn" class="btn btn-outline-danger rounded-pill px-4">
                                         <i class="fas fa-key me-2"></i>Update Password
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </div>
-
-
-
                 </div>
-
             </div>
         </form>
 
@@ -204,58 +242,42 @@ $hospital_profile = [
 document.addEventListener('DOMContentLoaded', function() {
     // --- CACHE DOM ELEMENTS ---
     const form = document.getElementById('updateProfileForm');
-    const successAlert = document.getElementById('successAlert');
 
-    /**
-     * 1. FORM SUBMISSION LOGIC (UI MOCKUP)
-     * Handles form validation and displays a success message.
-     */
+    // Form Submission Logic
     form.addEventListener('submit', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        // Add Bootstrap's validation class
-        form.classList.add('was-validated');
-
-        if (form.checkValidity()) {
-            // If form is valid, simulate a successful update
-            console.log('Form is valid. Simulating update...');
-
-            const submitBtn = form.querySelector('button[type="submit"]');
-            const originalBtnText = submitBtn.innerHTML;
-
-            // Show loading state
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Updating...';
-
-            // Simulate API call delay
-            setTimeout(() => {
-                // Show success alert
-                successAlert.classList.remove('d-none');
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-
-                // Reset button to original state after a delay
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = originalBtnText;
-
-                // Remove validation classes after success
-                form.classList.remove('was-validated');
-            }, 1500);
-
-        } else {
-            // If form is invalid, Bootstrap's default feedback will show
-            console.log('Form is invalid.');
+        if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
+            showAlert("Error! Please fill out all required fields correctly.", "danger");
         }
+        form.classList.add('was-validated');
     });
 
-    /**
-     * 2. FORM RESET LOGIC
-     * Resets validation state and logo preview.
-     */
-    form.addEventListener('reset', function() {
-        form.classList.remove('was-validated');
-        successAlert.classList.add('d-none');
-    });
+    // Alert Logic
+    const alertMsg = <?= json_encode($alert_msg) ?>;
+    const alertType = <?= json_encode($alert_type) ?>;
+    
+    if(alertMsg) {
+        showAlert(alertMsg, alertType);
+    }
+
+    function showAlert(message, type) {
+        const placeholder = document.getElementById('alertPlaceholder');
+        if(!placeholder) return;
+        
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = [
+            `<div class="alert alert-${type} alert-dismissible fade show border-0 shadow-sm rounded-3 py-3" role="alert">`,
+            `   <div class="d-flex align-items-center">`,
+            `       <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} fs-4 me-3"></i>`,
+            `       <div>${message}</div>`,
+            `   </div>`,
+            '   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
+            '</div>'
+        ].join('');
+        
+        placeholder.append(wrapper);
+    }
 
     /**
      * 4. PASSWORD VISIBILITY TOGGLE (EXAMPLE)

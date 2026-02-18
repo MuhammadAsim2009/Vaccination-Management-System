@@ -1,6 +1,87 @@
 <?php
 // Reusable Includes
+include '../../config/db.php';
 include '../includes/auth_check.php';
+
+// --- AJAX Handler for Dynamic Data ---
+if (isset($_GET['action']) && $_GET['action'] === 'fetch_report') {
+    header('Content-Type: application/json');
+    
+    $start_date = $_GET['start_date'] ?? date('Y-m-d');
+    $end_date = $_GET['end_date'] ?? date('Y-m-d');
+
+    // 1. Summary Counts
+    $summary = ['vaccinated' => 0, 'pending' => 0, 'missed' => 0];
+    $stmt = $conn->prepare("SELECT status, COUNT(*) as count FROM vaccination_schedule WHERE DATE(scheduled_date) BETWEEN ? AND ? GROUP BY status");
+    $stmt->bind_param("ss", $start_date, $end_date);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    while($row = $res->fetch_assoc()) {
+        $status = strtolower($row['status']);
+        if(isset($summary[$status])) {
+            $summary[$status] = $row['count'];
+        }
+    }
+
+    // 2. Chart Data (Group by Date)
+    $chart_data = ['labels' => [], 'completed' => [], 'pending' => [], 'missed' => []];
+    
+    $stmt = $conn->prepare("SELECT DATE(scheduled_date) as date, status, COUNT(*) as count FROM vaccination_schedule WHERE DATE(scheduled_date) BETWEEN ? AND ? GROUP BY DATE(scheduled_date), status ORDER BY date ASC");
+    $stmt->bind_param("ss", $start_date, $end_date);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    
+    $grouped_data = [];
+    while($row = $res->fetch_assoc()) {
+        $grouped_data[$row['date']][strtolower($row['status'])] = $row['count'];
+    }
+
+    $current = new DateTime($start_date);
+    $end = new DateTime($end_date);
+    
+    while ($current <= $end) {
+        $d = $current->format('Y-m-d');
+        $chart_data['labels'][] = $current->format('M d');
+        $chart_data['completed'][] = $grouped_data[$d]['vaccinated'] ?? 0;
+        $chart_data['pending'][] = $grouped_data[$d]['pending'] ?? 0;
+        $chart_data['missed'][] = $grouped_data[$d]['missed'] ?? 0;
+        $current->modify('+1 day');
+    }
+
+    // 3. Detailed Records
+    $records = [];
+    $stmt = $conn->prepare("
+        SELECT vs.id, c.id as child_id, c.name as child_name, v.vaccine_name, h.hospital_name, vs.status, vs.dose_number
+        FROM vaccination_schedule vs
+        JOIN children c ON vs.child_id = c.id
+        JOIN vaccines v ON vs.vaccine_id = v.id
+        LEFT JOIN hospitals h ON vs.hospital_id = h.id
+        WHERE DATE(vs.scheduled_date) BETWEEN ? AND ?
+        ORDER BY vs.scheduled_date ASC
+    ");
+    $stmt->bind_param("ss", $start_date, $end_date);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    while($row = $res->fetch_assoc()) {
+        $records[] = [
+            'id' => $row['id'],
+            'child_id' => $row['child_id'],
+            'child' => $row['child_name'],
+            'vaccine' => $row['vaccine_name'],
+            'dose' => $row['dose_number'],
+            'hospital' => $row['hospital_name'] ?? 'N/A',
+            'status' => ucfirst($row['status'])
+        ];
+    }
+
+    echo json_encode([
+        'summary' => $summary,
+        'chart' => $chart_data,
+        'records' => $records
+    ]);
+    exit;
+}
+
 include '../includes/header.php';
 include '../includes/sidebar.php';
 ?>
@@ -36,15 +117,14 @@ include '../includes/sidebar.php';
             <div class="card-body py-3">
                 <div class="row g-3 align-items-center">
                     <div class="col-md-4">
-                        <label for="dateFilter" class="form-label fw-semibold small text-muted text-uppercase">Select Date</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light border-end-0 text-muted">
-                                <i class="fas fa-calendar-day"></i>
-                            </span>
-                            <input type="date" id="dateFilter" class="form-control border-start-0 ps-0" value="<?php echo date('Y-m-d'); ?>">
-                        </div>
+                        <label for="startDate" class="form-label fw-semibold small text-muted text-uppercase">Start Date</label>
+                        <input type="date" id="startDate" class="form-control" value="<?php echo date('Y-m-d'); ?>">
                     </div>
-                    <div class="col-md-8 text-md-end pt-md-4">
+                    <div class="col-md-4">
+                        <label for="endDate" class="form-label fw-semibold small text-muted text-uppercase">End Date</label>
+                        <input type="date" id="endDate" class="form-control" value="<?php echo date('Y-m-d'); ?>">
+                    </div>
+                    <div class="col-md-4 text-md-end pt-md-4">
                         <span class="text-muted small">
                             <i class="fas fa-info-circle me-1"></i> Showing data for: <strong id="displayDateLabel" class="text-primary">Today</strong>
                         </span>
@@ -66,10 +146,6 @@ include '../includes/sidebar.php';
                             </div>
                         </div>
                         <h2 class="fw-bold mb-2" id="completedCount">0</h2>
-                        <div class="d-flex align-items-center text-success small fw-medium">
-                            <i class="fas fa-arrow-up me-1"></i>
-                            <span>8% from yesterday</span>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -84,10 +160,6 @@ include '../includes/sidebar.php';
                             </div>
                         </div>
                         <h2 class="fw-bold mb-2" id="pendingCount">0</h2>
-                        <div class="d-flex align-items-center text-muted small fw-medium">
-                            <i class="fas fa-minus me-1"></i>
-                            <span>Stable today</span>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -102,10 +174,6 @@ include '../includes/sidebar.php';
                             </div>
                         </div>
                         <h2 class="fw-bold mb-2" id="missedCount">0</h2>
-                        <div class="d-flex align-items-center text-danger small fw-medium">
-                            <i class="fas fa-arrow-down me-1"></i>
-                            <span>5% from yesterday</span>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -165,46 +233,7 @@ include '../includes/sidebar.php';
 <!-- JS Logic for Dynamic UI -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // --------------------------------------------------
-    // 1. DUMMY DATA SETUP
-    // --------------------------------------------------
     const todayStr = new Date().toISOString().split('T')[0];
-    
-    // Generate some fake dates around today
-    const reportsData = {
-        [todayStr]: {
-            completed: 24,
-            pending: 8,
-            missed: 3,
-            records: [
-                { id: 1, child: "Ahmad Khan", vaccine: "BCG", hospital: "City General Hospital", status: "Completed" },
-                { id: 2, child: "Sara Malik", vaccine: "Polio (OPV)", hospital: "Children's Medical Center", status: "Completed" },
-                { id: 3, child: "Zain Ali", vaccine: "DTP-HepB-Hib", hospital: "Family Wellness Clinic", status: "Pending" },
-                { id: 4, child: "Noor Fatima", vaccine: "Measles", hospital: "City General Hospital", status: "Missed" },
-                { id: 5, child: "Bilal Raza", vaccine: "BCG", hospital: "Aga Khan Health Service", status: "Completed" },
-                { id: 6, child: "Hania Sheikh", vaccine: "Hepatitis B", hospital: "Children's Medical Center", status: "Pending" }
-            ]
-        },
-        "2026-02-05": {
-            completed: 18,
-            pending: 5,
-            missed: 2,
-            records: [
-                { id: 1, child: "Arham Tahir", vaccine: "BCG", hospital: "City General Hospital", status: "Completed" },
-                { id: 2, child: "Eshal Naveed", vaccine: "Polio (OPV)", hospital: "Family Wellness", status: "Completed" },
-                { id: 3, child: "Hamza Butt", vaccine: "Rotavirus", hospital: "Children's Medical Center", status: "Missed" }
-            ]
-        },
-        "2026-02-04": {
-            completed: 30,
-            pending: 12,
-            missed: 5,
-            records: [
-                { id: 1, child: "Yusuf Khan", vaccine: "PCV", hospital: "Shaukat Khanum", status: "Completed" },
-                { id: 2, child: "Ayesha Bibi", vaccine: "IPV", hospital: "PIMS Hospital", status: "Pending" }
-            ]
-        }
-    };
 
     // --------------------------------------------------
     // 2. CHART.JS INITIALIZATION
@@ -280,137 +309,110 @@ document.addEventListener('DOMContentLoaded', function() {
     // --------------------------------------------------
     // 3. CORE UPDATE FUNCTION
     // --------------------------------------------------
-    const dateInput = document.getElementById('dateFilter');
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
     const labelDate = document.getElementById('displayDateLabel');
     const tableBody = document.getElementById('reportTableBody');
     const emptyState = document.getElementById('emptyState');
     
-    function updateDashboard(selectedDate) {
-        // Handle "Today" label
-        if (selectedDate === todayStr) {
-            labelDate.innerText = "Today";
-        } else {
-            const options = { year: 'numeric', month: 'long', day: 'numeric' };
-            labelDate.innerText = new Date(selectedDate).toLocaleDateString(undefined, options);
-        }
+    function updateDashboard(startStr, endStr) {
+        // Update Label
+        const options = { year: 'numeric', month: 'short', day: 'numeric' };
+        const sDate = new Date(startStr).toLocaleDateString(undefined, options);
+        const eDate = new Date(endStr).toLocaleDateString(undefined, options);
+        labelDate.innerText = `${sDate} - ${eDate}`;
 
-        const data = reportsData[selectedDate] || { completed: 0, pending: 0, missed: 0, records: [] };
+        // Fetch Data from PHP
+        fetch(`vaccination_report.php?action=fetch_report&start_date=${startStr}&end_date=${endStr}`)
+            .then(response => response.json())
+            .then(data => {
+                // Update Cards
+                document.getElementById('completedCount').innerText = data.summary.vaccinated || 0;
+                document.getElementById('pendingCount').innerText = data.summary.pending || 0;
+                document.getElementById('missedCount').innerText = data.summary.missed || 0;
 
-        // Update Cards
-        document.getElementById('completedCount').innerText = data.completed;
-        document.getElementById('pendingCount').innerText = data.pending;
-        document.getElementById('missedCount').innerText = data.missed;
+                // Update Chart
+                vaccinationChart.data.labels = data.chart.labels;
+                vaccinationChart.data.datasets[0].data = data.chart.completed;
+                vaccinationChart.data.datasets[1].data = data.chart.pending;
+                vaccinationChart.data.datasets[2].data = data.chart.missed;
+                vaccinationChart.update();
 
-        // --- Update Chart (7-Day Trend) ---
-        const last7Days = [];
-        const completedTrend = [];
-        const pendingTrend = [];
-        const missedTrend = [];
+                // Update Table
+                tableBody.innerHTML = '';
+                if (data.records.length > 0) {
+                    emptyState.classList.add('d-none');
+                    data.records.forEach((rec, index) => {
+                        let statusBadge = '';
+                        if(rec.status === 'Vaccinated' || rec.status === 'Completed') {
+                            statusBadge = `<span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-medium">
+                                <i class="fas fa-check-circle me-1"></i> Completed
+                            </span>`;
+                        } else if(rec.status === 'Pending') {
+                            statusBadge = `<span class="badge bg-warning-subtle text-dark border border-warning-subtle px-3 py-2 fw-medium">
+                                <i class="fas fa-clock me-1"></i> Pending
+                            </span>`;
+                        } else {
+                            statusBadge = `<span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fw-medium">
+                                <i class="fas fa-exclamation-circle me-1"></i> Missed
+                            </span>`;
+                        }
 
-        for (let i = 6; i >= 0; i--) {
-            const d = new Date(selectedDate);
-            d.setDate(d.getDate() - i);
-            const dStr = d.toISOString().split('T')[0];
-            
-            // Format label for chart (e.g., "Feb 06")
-            last7Days.push(d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
-            
-            const dayData = reportsData[dStr] || { 
-                // Generate some random consistent noise for dates with no hardcoded dummy data
-                completed: Math.floor(Math.random() * 10) + 15, 
-                pending: Math.floor(Math.random() * 5) + 3, 
-                missed: Math.floor(Math.random() * 3) 
-            };
-            
-            completedTrend.push(dayData.completed);
-            pendingTrend.push(dayData.pending);
-            missedTrend.push(dayData.missed);
-        }
-
-        vaccinationChart.data.labels = last7Days;
-        vaccinationChart.data.datasets[0].data = completedTrend;
-        vaccinationChart.data.datasets[1].data = pendingTrend;
-        vaccinationChart.data.datasets[2].data = missedTrend;
-        vaccinationChart.update();
-
-        // Update Table
-        tableBody.innerHTML = '';
-        if (data.records.length > 0) {
-            emptyState.classList.add('d-none');
-            data.records.forEach((rec, index) => {
-                let statusBadge = '';
-                if(rec.status === 'Completed') {
-                    statusBadge = `<span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fw-medium">
-                        <i class="fas fa-check-circle me-1"></i> Completed
-                    </span>`;
-                } else if(rec.status === 'Pending') {
-                    statusBadge = `<span class="badge bg-warning-subtle text-dark border border-warning-subtle px-3 py-2 fw-medium">
-                        <i class="fas fa-clock me-1"></i> Pending
-                    </span>`;
+                        const row = `
+                            <tr class="align-middle border-bottom border-light">
+                                <td class="ps-4 text-muted small">${index + 1}</td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="avatar-sm bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 35px; height: 35px; font-weight: 600;">
+                                            ${rec.child.charAt(0)}
+                                        </div>
+                                        <div class="d-flex flex-column">
+                                            <span class="fw-bold text-dark mb-0">${rec.child}</span>
+                                            <span class="text-muted x-small" style="font-size: 0.75rem;">Patient ID: #VMS-${1000 + rec.child_id}</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-column">
+                                        <span class="fw-medium text-primary">${rec.vaccine}</span>
+                                        <span class="text-muted x-small" style="font-size: 0.75rem;">Dose ${rec.dose}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center text-muted small">
+                                        <i class="fas fa-hospital me-2"></i>
+                                        <span>${rec.hospital}</span>
+                                    </div>
+                                </td>
+                                <td>${statusBadge}</td>
+                                <td class="text-end pe-4">
+                                    <a href="../children/child_profile.php?id=${rec.child_id}" class="btn btn-sm btn-outline-primary" title="View Details">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                </td>
+                            </tr>
+                        `;
+                        tableBody.insertAdjacentHTML('beforeend', row);
+                    });
                 } else {
-                    statusBadge = `<span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fw-medium">
-                        <i class="fas fa-exclamation-circle me-1"></i> Missed
-                    </span>`;
+                    emptyState.classList.remove('d-none');
                 }
-
-                const row = `
-                    <tr class="align-middle border-bottom border-light">
-                        <td class="ps-4 text-muted small">${index + 1}</td>
-                        <td>
-                            <div class="d-flex align-items-center">
-                                <div class="avatar-sm bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 35px; height: 35px; font-weight: 600;">
-                                    ${rec.child.charAt(0)}
-                                </div>
-                                <div class="d-flex flex-column">
-                                    <span class="fw-bold text-dark mb-0">${rec.child}</span>
-                                    <span class="text-muted x-small" style="font-size: 0.75rem;">Patient ID: #VMS-${1000 + rec.id}</span>
-                                </div>
-                            </div>
-                        </td>
-                        <td>
-                            <div class="d-flex flex-column">
-                                <span class="fw-medium text-primary">${rec.vaccine}</span>
-                                <span class="text-muted x-small" style="font-size: 0.75rem;">Dose 1 of 2</span>
-                            </div>
-                        </td>
-                        <td>
-                            <div class="d-flex align-items-center text-muted small">
-                                <i class="fas fa-hospital me-2"></i>
-                                <span>${rec.hospital}</span>
-                            </div>
-                        </td>
-                        <td>${statusBadge}</td>
-                        <td class="text-end pe-4">
-                            <div class="dropdown">
-                                <button class="btn btn-light btn-sm border shadow-sm dropdown-toggle hide-caret" type="button" data-bs-toggle="dropdown">
-                                    <i class="fas fa-ellipsis-v text-muted"></i>
-                                </button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow border-0">
-                                    <li><a class="dropdown-item py-2 small" href="#"><i class="fas fa-eye me-2 text-primary"></i>View Details</a></li>
-                                    <li><a class="dropdown-item py-2 small" href="#"><i class="fas fa-edit me-2 text-info"></i>Edit Record</a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item py-2 small text-danger" href="#"><i class="fas fa-trash me-2"></i>Remove</a></li>
-                                </ul>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-                tableBody.insertAdjacentHTML('beforeend', row);
-            });
-        } else {
-            emptyState.classList.remove('d-none');
-        }
+            })
+            .catch(error => console.error('Error fetching report:', error));
     }
 
     // --------------------------------------------------
     // 4. EVENT LISTENERS
     // --------------------------------------------------
-    dateInput.addEventListener('change', function() {
-        updateDashboard(this.value);
+    startDateInput.addEventListener('change', function() {
+        updateDashboard(startDateInput.value, endDateInput.value);
+    });
+    endDateInput.addEventListener('change', function() {
+        updateDashboard(startDateInput.value, endDateInput.value);
     });
 
     // Initial Load
-    updateDashboard(todayStr);
+    updateDashboard(todayStr, todayStr);
 });
 </script>
 

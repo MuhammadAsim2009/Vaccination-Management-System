@@ -1,27 +1,75 @@
 <?php
-/**
- * Update Vaccine Availability Status
- * 
- * Purpose: Update availability of an existing vaccine only.
- * Fields other than status are readonly.
- */
-
 // Reusable Includes
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// Get vaccine details from URL (Simulated data transfer between pages)
-$vaccineId = isset($_GET['id']) ? htmlspecialchars($_GET['id']) : 'VAC000';
-$vaccineName = isset($_GET['name']) ? htmlspecialchars($_GET['name']) : 'Unknown Vaccine';
-$ageGroup = isset($_GET['age']) ? htmlspecialchars($_GET['age']) : 'N/A';
-$doseCount = isset($_GET['doses']) ? htmlspecialchars($_GET['doses']) : '0';
-$currentStatus = isset($_GET['status']) ? htmlspecialchars($_GET['status']) : 'Available';
+// Check if vaccine ID is provided
+if (!isset($_GET['id'])) {
+    echo "<div class='alert alert-danger'>No vaccine ID provided. Please select a vaccine to update.</div>";
+    include '../includes/footer.php';
+    exit;
+}
+
+// Retrieve vaccine ID from URL
+$vaccineId = $_GET['id'];
+
+// Fetch vaccine details from database
+$stmt_vaccine = $conn->prepare("SELECT * FROM vaccines WHERE id = ?");
+$stmt_vaccine->bind_param("i", $vaccineId);
+$stmt_vaccine->execute();
+$stmt_result = $stmt_vaccine->get_result();
+
+// Check if vaccine exists
+if ($stmt_result->num_rows > 0) {
+    $vaccine = $stmt_result->fetch_assoc();
+
+    // Vaccine details into variables
+    $vaccineName = $vaccine['vaccine_name'] ?? 'Unknown Vaccine';
+    $ageGroup = $vaccine['target_age_group'] ?? 'N/A';
+    $doseCount = $vaccine['total_dose'] ?? 0;
+    $currentStatus = $vaccine['availability_status'] ?? 'Unknown';
+    
+} else {
+    echo "<div class='alert alert-warning'>Vaccine with ID <strong>" . htmlspecialchars($vaccineId) . "</strong> not found. Please select a valid vaccine.</div>";
+    include '../includes/footer.php';
+    exit;
+}
+
+
+// Initialize alert variables
+$alert_msg = '';
+$alert_type = '';
+
+// Update vaccine status if form is submitted
+if($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_btn'])) {
+    $status = $_POST['availability_status'];
+    $vaccine_id = $_POST['vaccine_id'];
+
+    // Update database
+    if ($stmt_update = $conn->prepare("UPDATE vaccines SET availability_status = ? WHERE id = ?")) {
+        $stmt_update->bind_param("si", $status, $vaccine_id);
+        
+        if($stmt_update->execute()) {
+            $alert_msg = "The availability status for <strong>$vaccineName</strong> has been updated successfully.";
+            $alert_type = "success";
+            $currentStatus = $status;
+        } else {
+            $alert_msg = "Error updating status: " . $stmt_update->error;
+            $alert_type = "danger";
+        }
+        $stmt_update->close();
+    } else {
+        $alert_msg = "Database preparation error: " . $conn->error;
+        $alert_type = "danger";
+    }
+}
+
 ?>
 
-<!-- ============================================
-     Main Content
-     ============================================ -->
+<!-- Main Content -->
+
 <main class="main-content">
     <div class="container-fluid px-4">
         
@@ -53,24 +101,27 @@ $currentStatus = isset($_GET['status']) ? htmlspecialchars($_GET['status']) : 'A
                     <div class="card-header bg-primary py-3">
                         <h5 class="card-title mb-0 text-white fw-bold d-flex align-items-center">
                             <i class="fas fa-vial me-2"></i>
-                            <span>Update Status: <?= $vaccineId ?></span>
+                            <span>Update Status: <?= htmlspecialchars($vaccineId) ?></span>
                         </h5>
                     </div>
                     <div class="card-body p-4 p-md-5">
                         
-                        <!-- UI-Only Success Alert -->
-                        <div id="successAlert" class="alert alert-success alert-dismissible fade show d-none border-0 shadow-sm mb-4" role="alert">
-                            <div class="d-flex">
-                                <i class="fas fa-check-circle fs-4 me-3"></i>
+                        <?php if($alert_msg): ?>
+                        <div class="alert alert-<?= $alert_type ?> alert-dismissible fade show border-0 shadow-sm mb-4" role="alert">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-<?= $alert_type == 'success' ? 'check-circle' : 'exclamation-circle' ?> fs-4 me-3"></i>
                                 <div>
-                                    <h6 class="alert-heading fw-bold mb-1">Update Successful!</h6>
-                                    <p class="mb-0 small">The availability status for <strong><?= $vaccineName ?></strong> has been updated. Redirecting...</p>
+                                    <h6 class="alert-heading fw-bold mb-1"><?= $alert_type == 'success' ? 'Update Successful!' : 'Update Failed!' ?></h6>
+                                    <p class="mb-0 small"><?= $alert_msg ?></p>
                                 </div>
                             </div>
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
+                        <?php endif; ?>
 
-                        <form id="updateStatusForm" onsubmit="handleFormSubmission(event)">
+                        <form id="updateStatusForm" method="POST">
+                            <input type="hidden" name="vaccine_id" value="<?= htmlspecialchars($vaccineId) ?>">
+                            <input type="hidden" name="update_btn" value="1">
                             <div class="row g-4">
                                 
                                 <!-- Readonly: Vaccine Name -->
@@ -78,7 +129,7 @@ $currentStatus = isset($_GET['status']) ? htmlspecialchars($_GET['status']) : 'A
                                     <label class="form-label fw-bold text-muted small text-uppercase">Vaccine Name</label>
                                     <div class="input-group">
                                         <span class="input-group-text bg-light border-end-0"><i class="fas fa-file-medical text-muted"></i></span>
-                                        <input type="text" class="form-control bg-light border-start-0 fw-semibold" value="<?= $vaccineName ?>" readonly>
+                                        <input type="text" class="form-control bg-light border-start-0 fw-semibold" value="<?= htmlspecialchars($vaccineName) ?>" readonly>
                                     </div>
                                 </div>
 
@@ -101,15 +152,12 @@ $currentStatus = isset($_GET['status']) ? htmlspecialchars($_GET['status']) : 'A
                                 <div class="col-12">
                                     <label class="form-label fw-bold text-dark">Current Availability Status</label>
                                     <div class="position-relative">
-                                        <select class="form-select form-select-lg border-2 border-primary border-opacity-10 fw-medium" 
-                                                id="statusDropdown" 
-                                                name="availability_status" 
-                                                required>
-                                            <option value="Available" <?= $currentStatus == 'Available' ? 'selected' : '' ?>>
-                                                🟢 Available (Recommended)
+                                        <select class="form-select form-select-lg border-2 border-primary border-opacity-10 fw-medium" id="statusDropdown" name="availability_status" required>
+                                            <option value="available" <?= $currentStatus == 'available' ? 'selected' : '' ?>>
+                                                🟢 Available
                                             </option>
-                                            <option value="Unavailable" <?= $currentStatus == 'Unavailable' ? 'selected' : '' ?>>
-                                                🔴 Unavailable (Stop new bookings)
+                                            <option value="unavailable" <?= $currentStatus == 'unavailable' ? 'selected' : '' ?>>
+                                                🔴 Unavailable
                                             </option>
                                         </select>
                                     </div>
@@ -161,41 +209,5 @@ $currentStatus = isset($_GET['status']) ? htmlspecialchars($_GET['status']) : 'A
 
     </div>
 </main>
-
-<script>
-/**
- * Handle form submission with UI feedback
- */
-function handleFormSubmission(event) {
-    event.preventDefault();
-    
-    const submitBtn = document.getElementById('submitBtn');
-    const originalContent = submitBtn.innerHTML;
-    
-    // Disable interaction
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = `
-        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-        <span>Processing Update...</span>
-    `;
-
-    // Simulate Network Latency
-    setTimeout(() => {
-        // Show Success UI
-        const successAlert = document.getElementById('successAlert');
-        successAlert.classList.remove('d-none');
-        
-        // Reset Button
-        submitBtn.innerHTML = `<i class="fas fa-check me-2"></i> Status Updated!`;
-        submitBtn.classList.replace('btn-primary', 'btn-success');
-
-        // Redirect after delay
-        setTimeout(() => {
-            window.location.href = 'vaccine_list.php';
-        }, 1800);
-        
-    }, 1200);
-}
-</script>
 
 <?php include '../includes/footer.php'; ?>

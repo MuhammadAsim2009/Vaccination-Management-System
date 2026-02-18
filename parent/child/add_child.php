@@ -1,15 +1,57 @@
 <?php
-/**
- * Add Child Registration Page
- * Allows parents to register a new child into the system.
- * 
- * Path: parent/child/add_child.php
- */
 
 // Include authentication and layout files
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+
+// Fetch parent information
+$stmt_parent = $conn->prepare("SELECT u.name, u.email, p.phone FROM parents p JOIN users u ON p.user_id = u.id WHERE p.user_id = ?");
+$stmt_parent->bind_param("i", $_SESSION['user_id']);
+$stmt_parent->execute();
+$result_parent = $stmt_parent->get_result();
+$parent = $result_parent->fetch_assoc();
+
+// Parent Data
+$parent_name = $parent['name'];
+$parent_email = $parent['email'];
+$parent_number = $parent['phone'];
+
+
+// Handle form submission
+if(isset($_POST['add_child'])) {
+
+    // Get form data
+    $parent_id = $_SESSION['user_id'];
+    $full_name = $_POST['full_name'];
+    $dob = $_POST['dob'];
+    $gender = $_POST['gender'];
+    $blood_group = $_POST['blood_group'];
+
+    // Insert child data into database
+    $stmt = $conn->prepare("INSERT INTO children (parent_id, name, date_of_birth, gender, blood_group) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param("issss", $parent_id, $full_name, $dob, $gender, $blood_group);
+
+    if($stmt->execute()) {
+        // Show success alert and redirect to children list after a short delay
+        echo "<script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('successAlert').classList.remove('d-none');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            setTimeout(function(){
+                window.location.href = 'children_list.php';
+            }, 5000);
+        });
+        </script>";
+    } else {
+        echo "<script>alert('DB Error: ".$stmt->error."');</script>";
+    }
+
+    $stmt->close();
+}
+
 ?>
 
 <!-- Main Content Container -->
@@ -54,7 +96,7 @@ include '../includes/sidebar.php';
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
 
-            <form id="addChildForm" class="needs-validation" novalidate>
+            <form id="addChildForm" class="needs-validation" method="post">
                 
                 <!-- Section 1: Child Basic Information -->
                 <h6 class="fw-bold text-secondary text-uppercase small mb-3 border-bottom pb-2">
@@ -67,7 +109,7 @@ include '../includes/sidebar.php';
                         <label for="childName" class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
                         <div class="input-group">
                             <span class="input-group-text bg-light"><i class="fas fa-user text-muted"></i></span>
-                            <input type="text" class="form-control" id="childName" placeholder="e.g. Sarah Ahmed" required>
+                            <input type="text" class="form-control" name="full_name" id="childName" placeholder="e.g. Sarah Ahmed" required>
                             <div class="invalid-feedback">Please enter the child's full name.</div>
                         </div>
                     </div>
@@ -75,7 +117,7 @@ include '../includes/sidebar.php';
                     <!-- Date of Birth -->
                     <div class="col-md-3">
                         <label for="dob" class="form-label fw-semibold">Date of Birth <span class="text-danger">*</span></label>
-                        <input type="date" class="form-control" id="dob" required>
+                        <input type="date" name="dob" class="form-control" id="dob" required>
                         <div class="invalid-feedback">Please select date of birth.</div>
                     </div>
 
@@ -108,7 +150,7 @@ include '../includes/sidebar.php';
                     <!-- Blood Group -->
                     <div class="col-md-6">
                         <label for="bloodGroup" class="form-label fw-semibold">Blood Group <span class="text-danger">*</span></label>
-                        <select class="form-select" id="bloodGroup" required>
+                        <select class="form-select" name="blood_group" id="bloodGroup" required>
                             <option value="" selected disabled>Select Blood Group</option>
                             <option value="A+">A+</option>
                             <option value="A-">A-</option>
@@ -133,21 +175,21 @@ include '../includes/sidebar.php';
                         <label class="form-label fw-semibold text-muted small">Parent Name</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i class="fas fa-user-circle text-muted"></i></span>
-                            <input type="text" class="form-control bg-light border-start-0" value="John Doe" readonly>
+                            <input type="text" class="form-control bg-light border-start-0" value="<?php echo htmlspecialchars($parent_name); ?>" readonly>
                         </div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold text-muted small">Contact Number</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i class="fas fa-phone text-muted"></i></span>
-                            <input type="text" class="form-control bg-light border-start-0" value="+1 (555) 123-4567" readonly>
+                            <input type="text" class="form-control bg-light border-start-0" value="<?php echo htmlspecialchars($parent_number); ?>" readonly>
                         </div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold text-muted small">Email Address</label>
                         <div class="input-group">
                             <span class="input-group-text bg-light border-end-0"><i class="fas fa-envelope text-muted"></i></span>
-                            <input type="text" class="form-control bg-light border-start-0" value="john.doe@example.com" readonly>
+                            <input type="text" class="form-control bg-light border-start-0" value="<?php echo htmlspecialchars($parent_email); ?>" readonly>
                         </div>
                     </div>
                 </div>
@@ -202,7 +244,7 @@ include '../includes/sidebar.php';
                 <div class="d-flex gap-2 mt-5">
                     <button type="button" class="btn btn-light border flex-fill" onclick="window.history.back()">Cancel</button>
                     <button type="reset" class="btn btn-outline-secondary flex-fill">Reset Form</button>
-                    <button type="submit" class="btn btn-primary flex-fill">
+                    <button type="submit" name="add_child" class="btn btn-primary flex-fill">
                         <i class="fas fa-save me-2"></i>Save Child
                     </button>
                 </div>
@@ -271,42 +313,6 @@ document.addEventListener('DOMContentLoaded', function() {
             ageInput.value = '';
         }
     });
-
-    // 3. Form Validation & Submission Mockup
-    const form = document.getElementById('addChildForm');
-    form.addEventListener('submit', function(event) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        if (form.checkValidity()) {
-            // Simulate API call / Processing
-            const submitBtn = form.querySelector('button[type="submit"]');
-            const originalBtnText = submitBtn.innerHTML;
-            
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
-
-            setTimeout(function() {
-                // Show Success Alert
-                document.getElementById('successAlert').classList.remove('d-none');
-                
-                // Scroll to top
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-                
-                // Reset button
-                submitBtn.innerHTML = '<i class="fas fa-check me-2"></i>Saved!';
-                submitBtn.classList.remove('btn-primary');
-                submitBtn.classList.add('btn-success');
-
-                // Redirect simulation
-                setTimeout(() => {
-                    window.location.href = 'children_list.php';
-                }, 2000);
-            }, 1500);
-        }
-
-        form.classList.add('was-validated');
-    }, false);
 });
 </script>
 

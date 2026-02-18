@@ -1,59 +1,76 @@
 <?php
-/**
- * Upcoming Vaccination Dates
- * Parent Panel
- * 
- * Displays upcoming vaccination schedules, reminders, calendar view,
- * and notification settings for parents.
- */
-
 // Include authentication and layout files
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// Dummy Data for UI Simulation
-$upcoming_vaccines = [
-    [
-        'id' => 1,
-        'child_id' => 1,
-        'child_name' => 'Sarah Ahmed',
-        'child_initials' => 'SA',
-        'theme' => 'primary',
-        'vaccine' => 'MMR Vaccine',
-        'dose' => '2nd Dose',
-        'due_date' => '2026-02-12',
-        'hospital' => 'City General Hospital',
-        'days_left' => 2,
-        'reminder_status' => 'Sent'
-    ],
-    [
-        'id' => 2,
-        'child_id' => 2,
-        'child_name' => 'Ahmed Ali',
-        'child_initials' => 'AA',
-        'theme' => 'success',
-        'vaccine' => 'Polio (OPV)',
-        'dose' => 'Booster',
-        'due_date' => '2026-02-15',
-        'hospital' => 'Metro Health Center',
-        'days_left' => 5,
-        'reminder_status' => 'Pending'
-    ],
-    [
-        'id' => 3,
-        'child_id' => 3,
-        'child_name' => 'Fatima Hassan',
-        'child_initials' => 'FH',
-        'theme' => 'danger',
-        'vaccine' => 'Hepatitis B',
-        'dose' => '3rd Dose',
-        'due_date' => '2026-02-20',
-        'hospital' => 'Children\'s Hospital',
-        'days_left' => 10,
-        'reminder_status' => 'Pending'
-    ]
-];
+// Fetch Parent ID
+$parent_id = $_SESSION['user_id'];
+
+// 1. Fetch Children for Filter
+$children_list = [];
+$stmt_ch = $conn->prepare("SELECT id, name FROM children WHERE parent_id = ?");
+$stmt_ch->bind_param("i", $parent_id);
+$stmt_ch->execute();
+$res_ch = $stmt_ch->get_result();
+while($row = $res_ch->fetch_assoc()) {
+    $children_list[] = $row;
+}
+
+// 2. Fetch Upcoming Vaccinations
+$upcoming_vaccines = [];
+$stmt_vac = $conn->prepare("SELECT vs.id, vs.child_id, c.name as child_name, v.vaccine_name, vs.dose_number, vs.scheduled_date, h.hospital_name, vs.status 
+                            FROM vaccination_schedule vs
+                            JOIN children c ON vs.child_id = c.id
+                            JOIN vaccines v ON vs.vaccine_id = v.id
+                            LEFT JOIN hospitals h ON vs.hospital_id = h.id
+                            WHERE c.parent_id = ? AND vs.status = 'pending'
+                            ORDER BY vs.created_at ASC");
+$stmt_vac->bind_param("i", $parent_id);
+$stmt_vac->execute();
+$res_vac = $stmt_vac->get_result();
+
+$week_count = 0;
+$next_due_text = "None";
+
+while($row = $res_vac->fetch_assoc()) {
+    // Calculate days left
+    $due_date = new DateTime($row['scheduled_date']);
+    $today = new DateTime();
+    $today->setTime(0,0,0); // Reset time part for accurate day diff
+    $due_date->setTime(0,0,0);
+    
+    $interval = $today->diff($due_date);
+    $days_left = (int)$interval->format('%r%a');
+    
+    if($days_left >= 0 && $days_left <= 7) {
+        $week_count++;
+    }
+    
+    if($next_due_text === "None" && $days_left >= 0) {
+        $next_due_text = $days_left . " days";
+    }
+
+    // Initials & Theme
+    $initials = strtoupper(substr($row['child_name'], 0, 2));
+    $themes = ['primary', 'success', 'danger', 'warning', 'info'];
+    $theme = $themes[$row['child_id'] % 5];
+
+    $upcoming_vaccines[] = [
+        'id' => $row['id'],
+        'child_id' => $row['child_id'],
+        'child_name' => $row['child_name'],
+        'child_initials' => $initials,
+        'theme' => $theme,
+        'vaccine' => $row['vaccine_name'],
+        'dose' => 'Dose ' . $row['dose_number'],
+        'due_date' => $row['scheduled_date'],
+        'hospital' => $row['hospital_name'] ?? 'Not Assigned',
+        'days_left' => $days_left,
+        'reminder_status' => ($days_left <= 3) ? 'Sent' : 'Pending'
+    ];
+}
 ?>
 
 <!-- Main Content Container -->
@@ -75,15 +92,19 @@ $upcoming_vaccines = [
             <div class="d-flex gap-2 justify-content-md-end">
                 <select class="form-select w-auto shadow-sm" id="filterChild">
                     <option value="all" selected>All Children</option>
-                    <option value="1">Sarah Ahmed</option>
-                    <option value="2">Ahmed Ali</option>
-                    <option value="3">Fatima Hassan</option>
+                    <?php foreach($children_list as $child): ?>
+                        <option value="<?= $child['id'] ?>"><?= htmlspecialchars($child['name']) ?></option>
+                    <?php endforeach; ?>
                 </select>
                 <select class="form-select w-auto shadow-sm" id="filterMonth">
                     <option value="all" selected>All Months</option>
-                    <option value="2026-02">February 2026</option>
-                    <option value="2026-03">March 2026</option>
-                    <option value="2026-04">April 2026</option>
+                    <?php 
+                    for($i=0; $i<6; $i++) {
+                        $m_val = date('Y-m', strtotime("+$i months"));
+                        $m_lbl = date('F Y', strtotime("+$i months"));
+                        echo "<option value='$m_val'>$m_lbl</option>";
+                    }
+                    ?>
                 </select>
             </div>
         </div>
@@ -96,19 +117,28 @@ $upcoming_vaccines = [
         </div>
         <div class="flex-grow-1">
             <h6 class="alert-heading fw-bold mb-1 text-dark">Upcoming Vaccinations This Week</h6>
-            <p class="mb-0 text-muted small">You have <strong class="text-dark">2 vaccinations</strong> scheduled for this week. Please ensure you are prepared.</p>
+            <p class="mb-0 text-muted small">You have <strong class="text-dark"><?= $week_count ?> vaccinations</strong> scheduled for this week. Please ensure you are prepared.</p>
         </div>
         <div class="text-end d-none d-sm-block">
             <span class="badge bg-warning text-dark fs-6 px-3 py-2 rounded-pill shadow-sm">
-                <i class="fas fa-clock me-1"></i> Next in: <span id="mainCountdown">2 days</span>
+                <i class="fas fa-clock me-1"></i> Next in: <span id="mainCountdown"><?= $next_due_text ?></span>
             </span>
         </div>
     </div>
 
     <!-- 3️⃣ Upcoming Vaccination Cards (Grid) -->
     <div class="row g-4 mb-4">
+        <?php if(empty($upcoming_vaccines)): ?>
+            <div class="col-12">
+                <div class="alert alert-info border-0 shadow-sm rounded-4 text-center py-4">
+                    <i class="fas fa-check-circle fa-2x mb-3 text-info"></i>
+                    <h5 class="fw-bold">All Caught Up!</h5>
+                    <p class="mb-0">No upcoming vaccinations found for your children.</p>
+                </div>
+            </div>
+        <?php endif; ?>
         <?php foreach($upcoming_vaccines as $vaccine): ?>
-        <div class="col-xl-4 col-md-6 filter-item" data-child-id="<?= $vaccine['child_id'] ?>" data-date="<?= $vaccine['due_date'] ?>">
+        <div class="col-xl-4 col-md-6 filter-item" data-child-id="<?= $vaccine['child_id'] ?>" data-date="<?= date('Y-m-d', strtotime($vaccine['due_date'])) ?>">
             <div class="card border-0 shadow-sm h-100 hover-card rounded-4">
                 <div class="card-body p-4">
                     <div class="d-flex justify-content-between align-items-start mb-3">
@@ -139,10 +169,25 @@ $upcoming_vaccines = [
                     </div>
 
                     <div class="d-flex justify-content-between align-items-center pt-3 border-top">
-                        <small class="text-warning fw-bold">
-                            <i class="fas fa-hourglass-half me-1"></i> <?= $vaccine['days_left'] ?> days left
+                        <small class="<?= $vaccine['days_left'] < 0 ? 'text-danger' : 'text-warning' ?> fw-bold">
+                            <?php if($vaccine['days_left'] < 0): ?>
+                                <i class="fas fa-exclamation-circle me-1"></i> Overdue by <?= abs($vaccine['days_left']) ?> days
+                            <?php elseif($vaccine['days_left'] == 0): ?>
+                                <i class="fas fa-calendar-check me-1"></i> Due Today
+                            <?php else: ?>
+                                <i class="fas fa-hourglass-half me-1"></i> <?= $vaccine['days_left'] ?> days left
+                            <?php endif; ?>
                         </small>
-                        <button class="btn btn-sm btn-outline-primary rounded-pill px-3">Details</button>
+                        <button class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                            data-bs-toggle="modal" 
+                            data-bs-target="#vaccineDetailsModal"
+                            data-child="<?= $vaccine['child_name'] ?>"
+                            data-vaccine="<?= $vaccine['vaccine'] ?>"
+                            data-dose="<?= $vaccine['dose'] ?>"
+                            data-date="<?= date('M d, Y', strtotime($vaccine['due_date'])) ?>"
+                            data-hospital="<?= $vaccine['hospital'] ?>"
+                            data-status="<?= $vaccine['reminder_status'] ?>"
+                        >Details</button>
                     </div>
                 </div>
             </div>
@@ -178,7 +223,7 @@ $upcoming_vaccines = [
                             </thead>
                             <tbody>
                                 <?php foreach($upcoming_vaccines as $row): ?>
-                                <tr class="filter-item" data-child-id="<?= $row['child_id'] ?>" data-date="<?= $row['due_date'] ?>">
+                                <tr class="filter-item" data-child-id="<?= $row['child_id'] ?>" data-date="<?= date('Y-m-d', strtotime($row['due_date'])) ?>">
                                     <td class="px-4 py-3">
                                         <div class="d-flex align-items-center">
                                             <div class="avatar-circle bg-soft-<?= $row['theme'] ?> rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 30px; height: 30px; font-size: 10px;">
@@ -202,30 +247,19 @@ $upcoming_vaccines = [
                                         <?php endif; ?>
                                     </td>
                                     <td class="px-4 py-3 text-end">
-                                        <button class="btn btn-sm btn-light text-primary border"><i class="fas fa-eye"></i></button>
+                                        <button class="btn btn-sm btn-light text-primary border"
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#vaccineDetailsModal"
+                                            data-child="<?= $row['child_name'] ?>"
+                                            data-vaccine="<?= $row['vaccine'] ?>"
+                                            data-dose="<?= $row['dose'] ?>"
+                                            data-date="<?= date('M d, Y', strtotime($row['due_date'])) ?>"
+                                            data-hospital="<?= $row['hospital'] ?>"
+                                            data-status="<?= $row['reminder_status'] ?>"
+                                        ><i class="fas fa-eye"></i></button>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
-                                <!-- Extra Dummy Row -->
-                                <tr class="filter-item" data-child-id="1" data-date="2026-03-01">
-                                    <td class="px-4 py-3">
-                                        <div class="d-flex align-items-center">
-                                            <div class="avatar-circle bg-soft-primary rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 30px; height: 30px; font-size: 10px;">SA</div>
-                                            <span class="fw-medium small">Sarah Ahmed</span>
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        <div class="small fw-bold text-dark">DPT Booster</div>
-                                        <div class="text-muted" style="font-size: 0.75rem;">Booster</div>
-                                    </td>
-                                    <td class="px-4 py-3 small text-dark fw-medium">Mar 01, 2026</td>
-                                    <td class="px-4 py-3">
-                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary border-opacity-25 rounded-pill">Scheduled</span>
-                                    </td>
-                                    <td class="px-4 py-3 text-end">
-                                        <button class="btn btn-sm btn-light text-primary border"><i class="fas fa-eye"></i></button>
-                                    </td>
-                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -250,10 +284,10 @@ $upcoming_vaccines = [
             <div class="card border-0 shadow-sm rounded-4 mb-4">
                 <div class="card-header bg-white py-3 border-bottom">
                     <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-calendar-alt me-2 text-info"></i>February 2026</h6>
+                        <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-calendar-alt me-2 text-info"></i><?= date('F Y') ?></h6>
                         <div class="btn-group btn-group-sm">
-                            <button class="btn btn-light border"><i class="fas fa-chevron-left small"></i></button>
-                            <button class="btn btn-light border"><i class="fas fa-chevron-right small"></i></button>
+                            <button class="btn btn-light border" disabled><i class="fas fa-chevron-left small"></i></button>
+                            <button class="btn btn-light border" disabled><i class="fas fa-chevron-right small"></i></button>
                         </div>
                     </div>
                 </div>
@@ -269,59 +303,40 @@ $upcoming_vaccines = [
                         <small class="text-muted fw-bold">S</small>
                     </div>
                     <div class="d-grid text-center" style="grid-template-columns: repeat(7, 1fr); gap: 5px;">
-                        <!-- Empty Days -->
-                        <div class="p-2"></div><div class="p-2"></div><div class="p-2"></div>
+                        <?php
+                        $days_in_month = date('t');
+                        $start_offset = date('w', strtotime(date('Y-m-01')));
                         
-                        <!-- Days 1-28 (Simplified) -->
-                        <div class="p-2 small rounded hover-bg-light">1</div>
-                        <div class="p-2 small rounded hover-bg-light">2</div>
-                        <div class="p-2 small rounded hover-bg-light">3</div>
-                        <div class="p-2 small rounded hover-bg-light">4</div>
-                        <div class="p-2 small rounded hover-bg-light">5</div>
-                        <div class="p-2 small rounded hover-bg-light">6</div>
-                        <div class="p-2 small rounded hover-bg-light">7</div>
-                        <div class="p-2 small rounded hover-bg-light">8</div>
-                        <div class="p-2 small rounded hover-bg-light">9</div>
-                        <div class="p-2 small rounded hover-bg-light">10</div>
-                        <div class="p-2 small rounded hover-bg-light">11</div>
+                        // Empty slots
+                        for($i=0; $i<$start_offset; $i++) echo '<div class="p-2"></div>';
                         
-                        <!-- Highlighted Day 12 -->
-                        <div class="p-2 small rounded bg-primary text-white fw-bold shadow-sm position-relative" data-bs-toggle="tooltip" title="MMR Vaccine - Sarah">
-                            12
-                            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle"></span>
-                        </div>
-                        
-                        <div class="p-2 small rounded hover-bg-light">13</div>
-                        <div class="p-2 small rounded hover-bg-light">14</div>
-                        
-                        <!-- Highlighted Day 15 -->
-                        <div class="p-2 small rounded bg-success text-white fw-bold shadow-sm position-relative" data-bs-toggle="tooltip" title="Polio - Ahmed">
-                            15
-                        </div>
-                        
-                        <div class="p-2 small rounded hover-bg-light">16</div>
-                        <div class="p-2 small rounded hover-bg-light">17</div>
-                        <div class="p-2 small rounded hover-bg-light">18</div>
-                        <div class="p-2 small rounded hover-bg-light">19</div>
-                        
-                        <!-- Highlighted Day 20 -->
-                        <div class="p-2 small rounded bg-warning text-dark fw-bold shadow-sm position-relative" data-bs-toggle="tooltip" title="Hep B - Fatima">
-                            20
-                        </div>
-                        
-                        <div class="p-2 small rounded hover-bg-light">21</div>
-                        <div class="p-2 small rounded hover-bg-light">22</div>
-                        <div class="p-2 small rounded hover-bg-light">23</div>
-                        <div class="p-2 small rounded hover-bg-light">24</div>
-                        <div class="p-2 small rounded hover-bg-light">25</div>
-                        <div class="p-2 small rounded hover-bg-light">26</div>
-                        <div class="p-2 small rounded hover-bg-light">27</div>
-                        <div class="p-2 small rounded hover-bg-light">28</div>
+                        // Days
+                        for($d=1; $d<=$days_in_month; $d++) {
+                            $current_date = date('Y-m-') . str_pad($d, 2, '0', STR_PAD_LEFT);
+                            $highlight_class = 'hover-bg-light';
+                            $tooltip = '';
+                            $has_event = false;
+                            
+                            foreach($upcoming_vaccines as $v) {
+                                if(date('Y-m-d', strtotime($v['due_date'])) == $current_date) {
+                                    $highlight_class = 'bg-' . $v['theme'] . ' text-white fw-bold shadow-sm';
+                                    $tooltip = $v['vaccine'] . ' - ' . $v['child_name'];
+                                    $has_event = true;
+                                    break; // Only highlight first event for simplicity in this grid
+                                }
+                            }
+                            
+                            echo '<div class="p-2 small rounded '.$highlight_class.' position-relative" '.($has_event ? 'data-bs-toggle="tooltip" title="'.htmlspecialchars($tooltip).'"' : '').'>';
+                            echo $d;
+                            if($has_event) {
+                                echo '<span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle"></span>';
+                            }
+                            echo '</div>';
+                        }
+                        ?>
                     </div>
                     <div class="mt-3 d-flex justify-content-center gap-3 small">
-                        <div class="d-flex align-items-center"><span class="badge bg-primary rounded-circle p-1 me-1"> </span> Sarah</div>
-                        <div class="d-flex align-items-center"><span class="badge bg-success rounded-circle p-1 me-1"> </span> Ahmed</div>
-                        <div class="d-flex align-items-center"><span class="badge bg-warning rounded-circle p-1 me-1"> </span> Fatima</div>
+                        <div class="text-muted fst-italic">Hover over highlighted dates for details</div>
                     </div>
                 </div>
             </div>
@@ -372,6 +387,50 @@ $upcoming_vaccines = [
 
 </div>
 
+<!-- Vaccine Details Modal -->
+<div class="modal fade" id="vaccineDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-bottom-0">
+                <h5 class="modal-title fw-bold">Vaccination Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="text-center mb-4">
+                    <div class="avatar-lg bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 64px; height: 64px;">
+                        <i class="fas fa-syringe fs-3"></i>
+                    </div>
+                    <h5 class="fw-bold mb-1" id="modalVaccineName"></h5>
+                    <span class="badge bg-light text-dark border" id="modalDose"></span>
+                </div>
+                
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="small text-muted fw-bold text-uppercase">Child Name</label>
+                        <div class="fw-medium" id="modalChildName"></div>
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted fw-bold text-uppercase">Due Date</label>
+                        <div class="fw-medium text-primary" id="modalDate"></div>
+                    </div>
+                    <div class="col-12">
+                        <label class="small text-muted fw-bold text-uppercase">Hospital</label>
+                        <div class="fw-medium" id="modalHospital"></div>
+                    </div>
+                    <div class="col-12">
+                        <label class="small text-muted fw-bold text-uppercase">Reminder Status</label>
+                        <div id="modalStatus"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top-0">
+                <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary rounded-pill px-4">Reschedule</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- JavaScript for Interactions -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -386,10 +445,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const countdownElement = document.getElementById('mainCountdown');
     let days = 2;
     
-    // Just a visual effect to show it's "live" (though static for this demo)
     setInterval(() => {
-        // In a real app, this would calculate time difference
-        // For UI demo, we keep it static or toggle slightly
+ 
     }, 1000);
 
     // Settings Save Button Interaction
@@ -447,6 +504,34 @@ document.addEventListener('DOMContentLoaded', function() {
     filterChild.addEventListener('change', applyFilters);
     filterMonth.addEventListener('change', applyFilters);
     filterSearch.addEventListener('keyup', applyFilters);
+
+    // Modal Population Logic
+    const vaccineModal = document.getElementById('vaccineDetailsModal');
+    if (vaccineModal) {
+        vaccineModal.addEventListener('show.bs.modal', function (event) {
+            const button = event.relatedTarget;
+            
+            const child = button.getAttribute('data-child');
+            const vaccine = button.getAttribute('data-vaccine');
+            const dose = button.getAttribute('data-dose');
+            const date = button.getAttribute('data-date');
+            const hospital = button.getAttribute('data-hospital');
+            const status = button.getAttribute('data-status');
+
+            vaccineModal.querySelector('#modalChildName').textContent = child;
+            vaccineModal.querySelector('#modalVaccineName').textContent = vaccine;
+            vaccineModal.querySelector('#modalDose').textContent = dose;
+            vaccineModal.querySelector('#modalDate').textContent = date;
+            vaccineModal.querySelector('#modalHospital').textContent = hospital;
+            
+            const statusContainer = vaccineModal.querySelector('#modalStatus');
+            if(status === 'Sent') {
+                statusContainer.innerHTML = '<span class="badge bg-success-subtle text-success border border-success border-opacity-25 rounded-pill">Reminder Sent</span>';
+            } else {
+                statusContainer.innerHTML = '<span class="badge bg-warning-subtle text-warning border border-warning border-opacity-25 rounded-pill">Pending</span>';
+            }
+        });
+    }
 });
 </script>
 

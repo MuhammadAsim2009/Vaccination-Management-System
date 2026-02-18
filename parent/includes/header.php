@@ -126,7 +126,7 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                 <li class="nav-item dropdown">
                     <a class="nav-link d-flex align-items-center gap-2 pe-0" href="#" id="profileDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         <div class="d-none d-md-block text-end">
-                            <p class="mb-0 small fw-semibold text-dark">John Doe</p>
+                            <p class="mb-0 small fw-semibold text-dark"><?= $_SESSION['name'] ?></p>
                             <p class="mb-0 text-muted" style="font-size: 0.75rem;">Parent</p>
                         </div>
                         <div class="bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">

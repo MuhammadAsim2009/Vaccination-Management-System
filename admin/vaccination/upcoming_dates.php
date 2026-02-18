@@ -1,8 +1,36 @@
 <?php
 // Reusable Includes
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+
+// Fetch Vaccines for Filter
+$vaccines_list = [];
+$stmt_v = $conn->prepare("SELECT DISTINCT vaccine_name FROM vaccines ORDER BY vaccine_name ASC");
+$stmt_v->execute();
+$res_v = $stmt_v->get_result();
+while($row_v = $res_v->fetch_assoc()){
+    $vaccines_list[] = $row_v['vaccine_name'];
+}
+
+// Fetch Upcoming Vaccinations
+$query = "SELECT 
+            vs.scheduled_date, 
+            vs.status, 
+            vs.dose_number, 
+            c.id as child_id, 
+            c.name as child_name, 
+            u.name as parent_name, 
+            v.vaccine_name, 
+            h.hospital_name 
+          FROM vaccination_schedule vs
+          JOIN children c ON vs.child_id = c.id
+          JOIN users u ON c.parent_id = u.id
+          JOIN vaccines v ON vs.vaccine_id = v.id
+          LEFT JOIN hospitals h ON vs.hospital_id = h.id
+          ORDER BY vs.scheduled_date ASC";
+$result = $conn->query($query);
 ?>
 
 <!-- ============================================
@@ -46,11 +74,9 @@ include '../includes/sidebar.php';
                         <label class="form-label fw-medium">Vaccine Type</label>
                         <select class="form-select" id="vaccineFilter">
                             <option value="">All Vaccines</option>
-                            <option value="BCG">BCG</option>
-                            <option value="Polio">Polio (OPV)</option>
-                            <option value="Hepatitis B">Hepatitis B</option>
-                            <option value="DTP">DTP</option>
-                            <option value="Measles">Measles</option>
+                            <?php foreach($vaccines_list as $vac): ?>
+                                <option value="<?= htmlspecialchars($vac) ?>"><?= htmlspecialchars($vac) ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-2">
@@ -81,143 +107,80 @@ include '../includes/sidebar.php';
                                 <th>Parent Name</th>
                                 <th>Vaccine Name</th>
                                 <th>Scheduled Date</th>
+                                <th>Dose Number</th>
                                 <th>Hospital Name</th>
                                 <th>Status</th>
                                 <th class="text-end px-4">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- Dummy Row 1 -->
-                            <tr class="vaccination-row" data-vaccine="Polio (OPV)" data-date="2026-02-15">
+                            <?php if($result && $result->num_rows > 0): ?>
+                            <?php while($row = $result->fetch_assoc()): 
+                                $date_raw = date('Y-m-d', strtotime($row['scheduled_date']));
+                                $display_date = date('M d, Y', strtotime($row['scheduled_date']));
+                                $time = date('h:i A', strtotime($row['scheduled_date']));
+                                
+                                // Status Logic
+                                $status_badge = 'bg-secondary-subtle text-secondary';
+                                $status_text = ucfirst($row['status']);
+                                
+                                if(strtolower($row['status']) == 'pending') {
+                                    $status_badge = 'bg-warning-subtle text-warning';
+                                    $status_text = 'Upcoming';
+                                } elseif(strtolower($row['status']) == 'vaccinated') {
+                                    $status_badge = 'bg-success-subtle text-success';
+                                    $status_text = 'Completed';
+                                } elseif(strtolower($row['status']) == 'missed') {
+                                    $status_badge = 'bg-danger-subtle text-danger';
+                                }
+
+                                // Initials for Avatar
+                                $initials = strtoupper(substr($row['child_name'], 0, 2));
+                                $colors = ['primary', 'success', 'info', 'warning', 'danger', 'secondary'];
+                                $color = $colors[array_rand($colors)];
+                            ?>
+                            <tr class="vaccination-row" data-vaccine="<?= htmlspecialchars($row['vaccine_name']) ?>" data-date="<?= $date_raw ?>">
                                 <td class="px-4">
                                     <div class="d-flex align-items-center">
-                                        <div class="avatar-sm rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-weight: 600;">
-                                            AA
+                                        <div class="avatar-sm rounded-circle bg-<?= $color ?>-subtle text-<?= $color ?> d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-weight: 600;">
+                                            <?= $initials ?>
                                         </div>
                                         <div>
-                                            <div class="fw-semibold">Ayaan Ahmed</div>
-                                            <small class="text-muted">ID: #C-5012</small>
+                                            <div class="fw-semibold"><?= htmlspecialchars($row['child_name']) ?></div>
+                                            <small class="text-muted">ID: #<?= $row['child_id'] ?></small>
                                         </div>
                                     </div>
                                 </td>
-                                <td>Mohammad Ahmed</td>
+                                <td><?= htmlspecialchars($row['parent_name']) ?></td>
                                 <td>
-                                    <span class="badge bg-info-subtle text-info fw-semibold rounded-pill px-3">Polio (OPV)</span>
+                                    <span class="badge bg-info-subtle text-info fw-semibold rounded-pill px-3"><?= htmlspecialchars($row['vaccine_name']) ?></span>
                                 </td>
                                 <td>
-                                    <div class="fw-medium">Feb 15, 2026</div>
-                                    <small class="text-muted">10:30 AM</small>
+                                    <div class="fw-medium"><?= $display_date ?></div>
+                                    <small class="text-muted"><?= $time ?></small>
                                 </td>
-                                <td>City General Hospital</td>
+                                <td class="text-center"><span class="badge bg-primary-subtle text-primary fw-semibold rounded-pill px-3"><?= htmlspecialchars($row['dose_number']) ?></span></td>
+                                <td><?= htmlspecialchars($row['hospital_name'] ?? 'Not Assigned') ?></td>
                                 <td>
-                                    <span class="badge bg-warning-subtle text-warning fw-semibold rounded-pill px-3">Upcoming</span>
+                                    <span class="badge <?= $status_badge ?> fw-semibold rounded-pill px-3"><?= $status_text ?></span>
                                 </td>
                                 <td class="text-end px-4">
-                                    <a href="../children/child_profile.php?id=1" class="btn btn-sm btn-light border" title="View Child Profile">
+                                    <a href="../children/child_profile.php?id=<?= $row['child_id'] ?>" class="btn btn-sm btn-light border" title="View Child Profile">
                                         <i class="fas fa-user-circle text-primary"></i>
                                     </a>
                                 </td>
                             </tr>
-                            <!-- Dummy Row 2 -->
-                            <tr class="vaccination-row" data-vaccine="BCG" data-date="2026-02-01">
-                                <td class="px-4">
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-sm rounded-circle bg-success-subtle text-success d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-weight: 600;">
-                                            ZK
-                                        </div>
-                                        <div>
-                                            <div class="fw-semibold">Zainab Khan</div>
-                                            <small class="text-muted">ID: #C-4988</small>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>Abdul Wahab</td>
-                                <td>
-                                    <span class="badge bg-primary-subtle text-primary fw-semibold rounded-pill px-3">BCG</span>
-                                </td>
-                                <td>
-                                    <div class="fw-medium text-danger">Feb 01, 2026</div>
-                                    <small class="text-danger">Overdue</small>
-                                </td>
-                                <td>Life Care Clinic</td>
-                                <td>
-                                    <span class="badge bg-danger-subtle text-danger fw-semibold rounded-pill px-3">Missed</span>
-                                </td>
-                                <td class="text-end px-4">
-                                    <a href="../children/child_profile.php?id=2" class="btn btn-sm btn-light border" title="View Child Profile">
-                                        <i class="fas fa-user-circle text-primary"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                            <!-- Dummy Row 3 -->
-                            <tr class="vaccination-row" data-vaccine="Hepatitis B" data-date="2026-02-20">
-                                <td class="px-4">
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-sm rounded-circle bg-info-subtle text-info d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-weight: 600;">
-                                            OM
-                                        </div>
-                                        <div>
-                                            <div class="fw-semibold">Omar Malik</div>
-                                            <small class="text-muted">ID: #C-5025</small>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>Bilal Malik</td>
-                                <td>
-                                    <span class="badge bg-purple-subtle text-purple fw-semibold rounded-pill px-3" style="background-color: #f3e8ff; color: #7e22ce;">Hepatitis B</span>
-                                </td>
-                                <td>
-                                    <div class="fw-medium">Feb 20, 2026</div>
-                                    <small class="text-muted">09:00 AM</small>
-                                </td>
-                                <td>Mother & Child Health</td>
-                                <td>
-                                    <span class="badge bg-warning-subtle text-warning fw-semibold rounded-pill px-3">Upcoming</span>
-                                </td>
-                                <td class="text-end px-4">
-                                    <a href="../children/child_profile.php?id=3" class="btn btn-sm btn-light border" title="View Child Profile">
-                                        <i class="fas fa-user-circle text-primary"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                            <!-- Dummy Row 4 -->
-                            <tr class="vaccination-row" data-vaccine="Measles" data-date="2026-02-28">
-                                <td class="px-4">
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-sm rounded-circle bg-warning-subtle text-warning d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-weight: 600;">
-                                            FS
-                                        </div>
-                                        <div>
-                                            <div class="fw-semibold">Fatima Sheikh</div>
-                                            <small class="text-muted">ID: #C-5044</small>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>Imran Sheikh</td>
-                                <td>
-                                    <span class="badge bg-info-subtle text-info fw-semibold rounded-pill px-3">Measles</span>
-                                </td>
-                                <td>
-                                    <div class="fw-medium">Feb 28, 2026</div>
-                                    <small class="text-muted">11:15 AM</small>
-                                </td>
-                                <td>City General Hospital</td>
-                                <td>
-                                    <span class="badge bg-warning-subtle text-warning fw-semibold rounded-pill px-3">Upcoming</span>
-                                </td>
-                                <td class="text-end px-4">
-                                    <a href="../children/child_profile.php?id=4" class="btn btn-sm btn-light border" title="View Child Profile">
-                                        <i class="fas fa-user-circle text-primary"></i>
-                                    </a>
-                                </td>
-                            </tr>
+                            <?php endwhile; ?>
+                            <?php else: ?>
+                                <tr><td colspan="7" class="text-center py-4 text-muted">No upcoming vaccinations found.</td></tr>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
             </div>
             <div class="card-footer bg-white py-3 border-top">
                 <div class="d-flex align-items-center justify-content-between">
-                    <p class="text-muted small mb-0">Showing 4 of 24 upcoming schedules</p>
+                    <p class="text-muted small mb-0">Showing <?= $result ? $result->num_rows : 0 ?> upcoming schedules</p>
                     <nav aria-label="Page navigation">
                         <ul class="pagination pagination-sm mb-0">
                             <li class="page-item disabled"><a class="page-link" href="#">Previous</a></li>

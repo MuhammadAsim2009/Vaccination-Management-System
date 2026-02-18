@@ -1,7 +1,56 @@
 <?php
+// Required Includes
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+
+
+// Fetch Hospital ID
+$user_id = $_SESSION['user_id'];
+$hospital_id = 0;
+$stmt = $conn->prepare("SELECT id FROM hospitals WHERE user_id = ?");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$res = $stmt->get_result();
+if ($res->num_rows > 0) {
+    $hospital_id = $res->fetch_assoc()['id'];
+}
+
+// Fetch Statistics
+$stats = ['total' => 0, 'today' => 0, 'completed' => 0, 'pending' => 0];
+if ($hospital_id) {
+    $sql_stats = "SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN DATE(scheduled_date) = CURDATE() THEN 1 ELSE 0 END) as today,
+                    SUM(CASE WHEN status = 'vaccinated' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
+                  FROM vaccination_schedule 
+                  WHERE hospital_id = ?";
+    $stmt_stats = $conn->prepare($sql_stats);
+    $stmt_stats->bind_param("i", $hospital_id);
+    $stmt_stats->execute();
+    $stats_res = $stmt_stats->get_result();
+    if ($stats_res->num_rows > 0) {
+        $stats = $stats_res->fetch_assoc();
+    }
+
+    // Fetch Appointments (Schedule)
+    $sql_list = "SELECT vs.id, vs.scheduled_date, vs.status, vs.dose_number,
+                        c.name as child_name, u.name as parent_name, u.email as parent_email,
+                        v.vaccine_name
+                 FROM vaccination_schedule vs
+                 JOIN children c ON vs.child_id = c.id
+                 JOIN users u ON c.parent_id = u.id
+                 JOIN vaccines v ON vs.vaccine_id = v.id
+                 WHERE vs.hospital_id = ?
+                 ORDER BY vs.created_at DESC";
+    $stmt_list = $conn->prepare($sql_list);
+    $stmt_list->bind_param("i", $hospital_id);
+    $stmt_list->execute();
+    $result_list = $stmt_list->get_result();
+}
+
 ?>
 
 <!-- Main Content -->
@@ -23,7 +72,7 @@ include '../includes/sidebar.php';
             </div>
         </div>
 
-        <!-- Stats Summary Cards (Matching Dashboard Style) -->
+        <!-- Stats Summary Cards -->
         <div class="row g-4 mb-4">
             <!-- Total Appointments -->
             <div class="col-12 col-sm-6 col-lg-3">
@@ -35,11 +84,7 @@ include '../includes/sidebar.php';
                                 <i class="fas fa-calendar-check fs-4"></i>
                             </div>
                         </div>
-                        <h2 class="fw-bold mb-2">1,245</h2>
-                        <div class="d-flex align-items-center text-success small fw-medium">
-                            <i class="fas fa-arrow-up me-1"></i>
-                            <span>12% from last month</span>
-                        </div>
+                        <h2 class="fw-bold mb-2"><?= number_format($stats['total']) ?></h2>
                     </div>
                 </div>
             </div>
@@ -54,11 +99,7 @@ include '../includes/sidebar.php';
                                 <i class="fas fa-calendar-day fs-4"></i>
                             </div>
                         </div>
-                        <h2 class="fw-bold mb-2">45</h2>
-                        <div class="d-flex align-items-center text-success small fw-medium">
-                            <i class="fas fa-arrow-up me-1"></i>
-                            <span>5% from yesterday</span>
-                        </div>
+                        <h2 class="fw-bold mb-2"><?= number_format($stats['today']) ?></h2>
                     </div>
                 </div>
             </div>
@@ -73,11 +114,7 @@ include '../includes/sidebar.php';
                                 <i class="fas fa-check-circle fs-4"></i>
                             </div>
                         </div>
-                        <h2 class="fw-bold mb-2">856</h2>
-                        <div class="d-flex align-items-center text-success small fw-medium">
-                            <i class="fas fa-arrow-up me-1"></i>
-                            <span>8% from last month</span>
-                        </div>
+                        <h2 class="fw-bold mb-2"><?= number_format($stats['completed']) ?></h2>
                     </div>
                 </div>
             </div>
@@ -92,11 +129,7 @@ include '../includes/sidebar.php';
                                 <i class="fas fa-clock fs-4"></i>
                             </div>
                         </div>
-                        <h2 class="fw-bold mb-2">344</h2>
-                         <div class="d-flex align-items-center text-danger small fw-medium">
-                            <i class="fas fa-arrow-down me-1"></i>
-                            <span>2% from last week</span>
-                        </div>
+                        <h2 class="fw-bold mb-2"><?= number_format($stats['pending']) ?></h2>
                     </div>
                 </div>
             </div>
@@ -122,8 +155,8 @@ include '../includes/sidebar.php';
                         <select class="form-select bg-light" id="statusInput">
                             <option value="all" selected>All Statuses</option>
                             <option value="pending">Pending</option>
-                            <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
+                            <option value="vaccinated">Vaccinated</option>
+                            <option value="missed">Missed</option>
                         </select>
                     </div>
                     <div class="col-md-2">
@@ -133,7 +166,7 @@ include '../includes/sidebar.php';
             </div>
         </div>
 
-        <!-- Appointment List Table (Matching Dashboard Style) -->
+        <!-- Appointment List Table -->
         <div class="card border-0 shadow-sm rounded-4 h-100">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h5 class="mb-0 fw-bold"><i class="fas fa-list-ul me-2 text-primary"></i>Appointment List</h5>
@@ -154,175 +187,76 @@ include '../includes/sidebar.php';
                             </tr>
                         </thead>
                         <tbody id="appointmentTableBody">
-                            <!-- Row 1: Pending -->
-                            <tr data-date="2023-10-25" data-status="pending">
-                                <td class="ps-4 fw-bold text-primary">#APT-001</td>
+                            <?php if (isset($result_list) && $result_list->num_rows > 0): ?>
+                            <?php while ($row = $result_list->fetch_assoc()): 
+                                $status_class = 'bg-soft-warning text-warning';
+                                $status_display = ucfirst($row['status']);
+                                if ($row['status'] == 'vaccinated') {
+                                    $status_class = 'bg-soft-success text-success';
+                                    $status_display = 'Vaccinated';
+                                } elseif ($row['status'] == 'missed') {
+                                    $status_class = 'bg-soft-danger text-danger';
+                                }
+                                
+                                $date_obj = new DateTime($row['scheduled_date']);
+                                $formatted_date = $date_obj->format('M d, Y');
+                                $formatted_time = $date_obj->format('h:i A');
+                                $filter_date = $date_obj->format('Y-m-d');
+                            ?>
+                            <tr data-date="<?= $filter_date ?>" data-status="<?= strtolower($status_display) ?>">
+                                <td class="ps-4 fw-bold text-primary">#<?= $row['id'] ?></td>
                                 <td>
                                     <div class="d-flex align-items-center">
                                         <div class="avatar-sm me-2 bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
                                             <i class="fas fa-user small"></i>
                                         </div>
                                         <div>
-                                            <div class="fw-bold parent-name">Linda Hamilton</div>
-                                            <div class="small text-muted">linda@example.com</div>
+                                            <div class="fw-bold parent-name"><?= htmlspecialchars($row['parent_name']) ?></div>
+                                            <div class="small text-muted"><?= htmlspecialchars($row['parent_email']) ?></div>
                                         </div>
                                     </div>
                                 </td>
-                                <td class="child-name">Sarah Connor</td>
-                                <td>Polio (OPV) - Dose 1</td>
+                                <td class="child-name"><?= htmlspecialchars($row['child_name']) ?></td>
+                                <td><?= htmlspecialchars($row['vaccine_name']) ?> <?= isset($row['dose_number']) ? '- Dose ' . $row['dose_number'] : '' ?></td>
                                 <td>
-                                    <div class="fw-bold">Oct 25, 2023</div>
-                                    <div class="small text-muted">10:00 AM - 10:30 AM</div>
+                                    <div class="fw-bold"><?= $formatted_date ?></div>
+                                    <div class="small text-muted"><?= $formatted_time ?></div>
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge bg-soft-warning text-warning rounded-pill px-3 status-badge">Pending</span>
+                                    <span class="badge <?= $status_class ?> rounded-pill px-3 status-badge"><?= $status_display ?></span>
                                 </td>
                                 <td class="text-end pe-4">
-                                    <a class="btn btn-sm btn-outline-primary me-2" href="#" data-bs-toggle="modal" data-bs-target="#viewAppointmentModal" title="View Details">
+                                    <button class="btn btn-sm btn-outline-primary me-2 view-btn" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#viewAppointmentModal" 
+                                            title="View Details"
+                                            data-id="<?= $row['id'] ?>"
+                                            data-parent="<?= htmlspecialchars($row['parent_name']) ?>"
+                                            data-child="<?= htmlspecialchars($row['child_name']) ?>"
+                                            data-vaccine="<?= htmlspecialchars($row['vaccine_name']) ?>"
+                                            data-dose="<?= isset($row['dose_number']) ? $row['dose_number'] : '' ?>"
+                                            data-date="<?= $formatted_date ?>"
+                                            data-time="<?= $formatted_time ?>"
+                                            data-status="<?= $status_display ?>"
+                                            data-status-class="<?= $status_class ?>">
                                         <i class="fas fa-eye"></i>
-                                    </a>
-                                    <a class="btn btn-sm btn-primary" href='update_status.php' title="Update Status">
+                                    </button>
+                                    <a class="btn btn-sm btn-primary" href='update_status.php?id=<?= $row['id'] ?>' title="Update Status">
                                         <i class="fas fa-edit"></i>
                                     </a>
                                 </td>
                             </tr>
-
-                            <!-- Row 2: Completed -->
-                            <tr data-date="2023-10-24" data-status="completed">
-                                <td class="ps-4 fw-bold text-primary">#APT-002</td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-sm me-2 bg-success bg-opacity-10 text-success rounded-circle d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
-                                            <i class="fas fa-user small"></i>
-                                        </div>
-                                        <div>
-                                            <div class="fw-bold parent-name">Helen Wick</div>
-                                            <div class="small text-muted">helen@example.com</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="child-name">John Wick</td>
-                                <td>BCG - Dose 1</td>
-                                <td>
-                                    <div class="fw-bold">Oct 24, 2023</div>
-                                    <div class="small text-muted">02:30 PM - 03:00 PM</div>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-soft-success text-success rounded-pill px-3 status-badge">Completed</span>
-                                </td>
-                                <td class="text-end pe-4">
-                                    <a class="btn btn-sm btn-outline-primary me-2" href="#" data-bs-toggle="modal" data-bs-target="#viewAppointmentModal" title="View Details">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <a class="btn btn-sm btn-primary" href='update_status.php' title="Update Status">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                </td>
-                            </tr>
-
-                            <!-- Row 3: Cancelled -->
-                            <tr data-date="2023-10-26" data-status="cancelled">
-                                <td class="ps-4 fw-bold text-primary">#APT-003</td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-sm me-2 bg-danger bg-opacity-10 text-danger rounded-circle d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
-                                            <i class="fas fa-user small"></i>
-                                        </div>
-                                        <div>
-                                            <div class="fw-bold parent-name">Martha Wayne</div>
-                                            <div class="small text-muted">martha@example.com</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="child-name">Bruce Wayne</td>
-                                <td>MMR - Dose 1</td>
-                                <td>
-                                    <div class="fw-bold">Oct 26, 2023</div>
-                                    <div class="small text-muted">09:15 AM - 09:45 AM</div>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-soft-danger text-danger rounded-pill px-3 status-badge">Cancelled</span>
-                                </td>
-                                <td class="text-end pe-4">
-                                    <a class="btn btn-sm btn-outline-primary me-2" href="#" data-bs-toggle="modal" data-bs-target="#viewAppointmentModal" title="View Details">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <a class="btn btn-sm btn-primary" href='update_status.php' title="Update Status">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                             <!-- Row 4: Pending -->
-                             <tr data-date="2023-10-27" data-status="pending">
-                                <td class="ps-4 fw-bold text-primary">#APT-004</td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-sm me-2 bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
-                                            <i class="fas fa-user small"></i>
-                                        </div>
-                                        <div>
-                                            <div class="fw-bold parent-name">Martha Kent</div>
-                                            <div class="small text-muted">kent@example.com</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="child-name">Clark Kent</td>
-                                <td>Hepatitis B - Dose 2</td>
-                                <td>
-                                    <div class="fw-bold">Oct 27, 2023</div>
-                                    <div class="small text-muted">11:00 AM - 11:30 AM</div>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-soft-warning text-warning rounded-pill px-3 status-badge">Pending</span>
-                                </td>
-                                                                <td class="text-end pe-4">
-                                    <a class="btn btn-sm btn-outline-primary me-2" href="#" data-bs-toggle="modal" data-bs-target="#viewAppointmentModal" title="View Details">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <a class="btn btn-sm btn-primary" href='vaccination/update_status.php' title="Update Status">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                </td>
-                            </tr>
-                             <!-- Row 5: Pending -->
-                             <tr data-date="2023-10-28" data-status="pending">
-                                <td class="ps-4 fw-bold text-primary">#APT-005</td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="avatar-sm me-2 bg-info bg-opacity-10 text-info rounded-circle d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
-                                            <i class="fas fa-user small"></i>
-                                        </div>
-                                        <div>
-                                            <div class="fw-bold parent-name">Hippolyta</div>
-                                            <div class="small text-muted">queen@example.com</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="child-name">Diana Prince</td>
-                                <td>Rotavirus - Dose 1</td>
-                                <td>
-                                    <div class="fw-bold">Oct 28, 2023</div>
-                                    <div class="small text-muted">03:45 PM - 04:15 PM</div>
-                                </td>
-                                <td class="text-center">
-                                    <span class="badge bg-soft-warning text-warning rounded-pill px-3 status-badge">Pending</span>
-                                </td>
-                                <td class="text-end pe-4">
-                                    <a class="btn btn-sm btn-outline-primary me-2" href="#" data-bs-toggle="modal" data-bs-target="#viewAppointmentModal" title="View Details">
-                                        <i class="fas fa-eye"></i>
-                                    </a>
-                                    <a class="btn btn-sm btn-primary" href='update_status.php' title="Update Status">
-                                        <i class="fas fa-edit"></i>
-                                    </a>
-                                </td>
-                            </tr>
+                            <?php endwhile; ?>
+                            <?php else: ?>
+                                <tr><td colspan="7" class="text-center py-4 text-muted">No scheduled vaccinations found.</td></tr>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
             </div>
              <!-- Pagination -->
              <div class="card-footer bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-                <div class="small text-muted">Showing <span class="fw-bold">1</span> to <span class="fw-bold">5</span> of <span class="fw-bold">12</span> entries</div>
+                <div class="small text-muted">Showing all records</div>
                 <nav aria-label="Page navigation">
                     <ul class="pagination justify-content-end mb-0">
                         <li class="page-item disabled">
@@ -355,92 +289,45 @@ include '../includes/sidebar.php';
                     <div class="avatar-lg bg-soft-primary text-primary rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px;">
                         <i class="fas fa-calendar-check fs-1"></i>
                     </div>
-                    <h5 class="fw-bold mb-1">Confimation #APT-2024-001</h5>
-                    <span class="badge bg-soft-warning text-warning rounded-pill px-3">Pending</span>
+                    <h5 class="fw-bold mb-1" id="modalApptId">Confirmation #SCH-000</h5>
+                    <span class="badge bg-soft-warning text-warning rounded-pill px-3" id="modalStatus">Pending</span>
                 </div>
                 
                 <div class="row g-3">
                     <div class="col-6">
                         <label class="small text-muted fw-bold text-uppercase">Parent Name</label>
-                        <div class="fw-medium">Linda Hamilton</div>
+                        <div class="fw-medium" id="modalParent"></div>
                     </div>
                     <div class="col-6">
                         <label class="small text-muted fw-bold text-uppercase">Child Name</label>
-                        <div class="fw-medium">Sarah Connor</div>
+                        <div class="fw-medium" id="modalChild"></div>
                     </div>
                     <div class="col-6">
                         <label class="small text-muted fw-bold text-uppercase">Vaccine</label>
-                        <div class="fw-medium">Polio (OPV)</div>
+                        <div class="fw-medium" id="modalVaccine"></div>
                     </div>
                      <div class="col-6">
                         <label class="small text-muted fw-bold text-uppercase">Dose Application</label>
-                        <div class="fw-medium">Dose 1 (Oral)</div>
+                        <div class="fw-medium" id="modalDose"></div>
                     </div>
                     <div class="col-6">
                         <label class="small text-muted fw-bold text-uppercase">Date</label>
-                        <div class="fw-medium">Oct 25, 2023</div>
+                        <div class="fw-medium" id="modalDate"></div>
                     </div>
                     <div class="col-6">
                         <label class="small text-muted fw-bold text-uppercase">Time Slot</label>
-                        <div class="fw-medium">10:00 AM - 10:30 AM</div>
+                        <div class="fw-medium" id="modalTime"></div>
                     </div>
                     <div class="col-12">
                         <label class="small text-muted fw-bold text-uppercase">Hospital</label>
-                        <div class="fw-medium">City General Hospital</div>
+                        <div class="fw-medium"><?= $_SESSION['name'] ?></div>
                     </div>
-                    <div class="col-12">
-                        <label class="small text-muted fw-bold text-uppercase">Notes</label>
-                        <div class="alert alert-light border small text-muted mb-0">
-                            Parent requested morning slot. Child has mild allergy to dust.
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer border-top-0 d-flex justify-content-between p-4 bg-light rounded-bottom-4">
-                <button type="button" class="btn btn-outline-danger rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#cancelAppointmentModal">Cancel Appointment</button>
-                <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#markCompletedModal">Mark Completed</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Mark Completed Modal -->
-<div class="modal fade" id="markCompletedModal" tabindex="-1" aria-labelledby="markCompletedModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content border-0 shadow rounded-4 text-center p-3">
-            <div class="modal-body">
-                <div class="avatar-md bg-soft-success text-success rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
-                    <i class="fas fa-check fs-3"></i>
-                </div>
-                <h5 class="fw-bold mb-2">Mark as Completed?</h5>
-                <p class="text-muted small mb-4">Are you sure you want to mark this appointment as completed?</p>
-                <div class="d-flex justify-content-center gap-2">
-                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">No</button>
-                    <button type="button" class="btn btn-success rounded-pill px-4">Yes</button>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Cancel Appointment Modal -->
-<div class="modal fade" id="cancelAppointmentModal" tabindex="-1" aria-labelledby="cancelAppointmentModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content border-0 shadow rounded-4 text-center p-3">
-            <div class="modal-body">
-                <div class="avatar-md bg-soft-danger text-danger rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
-                    <i class="fas fa-exclamation-triangle fs-3"></i>
-                </div>
-                <h5 class="fw-bold mb-2">Cancel Appointment?</h5>
-                <p class="text-muted small mb-4">Are you sure you want to cancel this appointment? This action cannot be undone.</p>
-                <div class="d-flex justify-content-center gap-2">
-                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">No</button>
-                    <button type="button" class="btn btn-danger rounded-pill px-4">Yes, Cancel</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -489,6 +376,35 @@ document.addEventListener('DOMContentLoaded', function() {
         dateInput.value = '';
         statusInput.value = 'all';
         filterTable();
+    });
+
+    // Modal Population
+    const viewBtns = document.querySelectorAll('.view-btn');
+    viewBtns.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const id = this.getAttribute('data-id');
+            const parent = this.getAttribute('data-parent');
+            const child = this.getAttribute('data-child');
+            const vaccine = this.getAttribute('data-vaccine');
+            const dose = this.getAttribute('data-dose');
+            const date = this.getAttribute('data-date');
+            const time = this.getAttribute('data-time');
+            const status = this.getAttribute('data-status');
+            const statusClass = this.getAttribute('data-status-class');
+
+            document.getElementById('modalApptId').textContent = 'Confirmation #' + id;
+            
+            const modalStatus = document.getElementById('modalStatus');
+            modalStatus.textContent = status;
+            modalStatus.className = 'badge rounded-pill px-3 ' + statusClass;
+            
+            document.getElementById('modalParent').textContent = parent;
+            document.getElementById('modalChild').textContent = child;
+            document.getElementById('modalVaccine').textContent = vaccine;
+            document.getElementById('modalDose').textContent = dose ? 'Dose ' + dose : 'N/A';
+            document.getElementById('modalDate').textContent = date;
+            document.getElementById('modalTime').textContent = time;
+        });
     });
 });
 </script>

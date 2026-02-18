@@ -1,18 +1,35 @@
 <?php
-/**
- * Add New Vaccine Page
- * Hospital Panel - Vaccination Management System
- * 
- * This page provides a frontend interface for hospital staff to add a new
- * type of vaccine into the system's inventory.
- * 
- * @path /hospital/vaccines/add_vaccine.php
- */
-
-// Essential includes for authentication, header, sidebar, and footer
+// Essential includes for authentication, header, sidebar, and database connection
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+
+$alert_msg = '';
+$alert_type = '';
+
+// Add Vaccine Logic
+if(isset($_POST['add_btn'])) {
+    // Get form data
+    $name = $_POST['vaccine_name'];
+    $age_group = $_POST['age_group'];
+    $doses = $_POST['total_doses'];
+    $status = $_POST['availability_status'];
+    $description = $_POST['description'];
+
+    // Insert into database
+    $stmt = $conn->prepare("INSERT INTO vaccines (vaccine_name, target_age_group, total_dose, availability_status, description) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssiss", $name, $age_group, $doses, $status, $description);
+    if($stmt->execute()) {
+        $alert_msg = "New vaccine added successfully.";
+        $alert_type = "success";
+    } else {
+        $alert_msg = "Error adding vaccine: " . $conn->error;
+        $alert_type = "danger";
+    }
+
+}
+
 ?>
 
 <!-- Main Content -->
@@ -36,31 +53,10 @@ include '../includes/sidebar.php';
 
         <!-- UI Alerts Placeholder -->
         <div class="row">
-            <div class="col-md-12">
-                <!-- Success Alert -->
-                <div id="successAlert" class="alert alert-success d-none alert-dismissible fade show shadow-sm rounded-4" role="alert">
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-check-circle fs-4 me-3"></i>
-                        <div>
-                            <strong>Success!</strong> The new vaccine has been added to the system. (UI Mockup)
-                        </div>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-                <!-- Error Alert -->
-                <div id="errorAlert" class="alert alert-danger d-none alert-dismissible fade show shadow-sm rounded-4" role="alert">
-                    <div class="d-flex align-items-center">
-                        <i class="fas fa-exclamation-triangle fs-4 me-3"></i>
-                        <div>
-                            <strong>Error!</strong> Please fill out all required fields correctly.
-                        </div>
-                    </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-            </div>
+            <div class="col-md-12" id="alertPlaceholder"></div>
         </div>
 
-        <form id="addVaccineForm" class="needs-validation" novalidate>
+        <form id="addVaccineForm" method="POST" class="needs-validation" novalidate>
             <div class="row g-4">
                 <!-- Left Column: Main Info -->
                 <div class="col-lg-8">
@@ -73,28 +69,22 @@ include '../includes/sidebar.php';
                             <div class="row g-3">
                                 <div class="col-md-12">
                                     <label for="vaccineName" class="form-label fw-semibold">Vaccine Name <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control" id="vaccineName" placeholder="e.g., MMR Vaccine" required>
+                                    <input type="text" class="form-control" name="vaccine_name" id="vaccineName" placeholder="e.g., MMR Vaccine" required>
                                     <div class="invalid-feedback">Please enter the vaccine name.</div>
                                 </div>
                                 <div class="col-md-8">
                                     <label for="ageGroup" class="form-label fw-semibold">Target Age Group <span class="text-danger">*</span></label>
-                                    <select class="form-select" id="ageGroup" required>
-                                        <option value="" selected disabled>Select age group...</option>
-                                        <option value="0-6">0–6 months</option>
-                                        <option value="6-12">6–12 months</option>
-                                        <option value="1-5">1–5 years</option>
-                                        <option value="all">All ages</option>
-                                    </select>
-                                    <div class="invalid-feedback">Please select a target age group.</div>
+                                    <input type="text" class="form-control" name="age_group" id="ageGroup" placeholder="e.g., 1-5 years, All ages" required>
+                                    <div class="invalid-feedback">Please enter a target age group.</div>
                                 </div>
                                 <div class="col-md-4">
                                     <label for="totalDoses" class="form-label fw-semibold">Total Doses <span class="text-danger">*</span></label>
-                                    <input type="number" class="form-control" id="totalDoses" min="1" value="1" required>
+                                    <input type="number" class="form-control" name="total_doses" id="totalDoses" min="1" value="1" required>
                                     <div class="invalid-feedback">Enter required doses.</div>
                                 </div>
                                 <div class="col-12">
                                     <label for="description" class="form-label fw-semibold">Description</label>
-                                    <textarea class="form-control" id="description" rows="4" placeholder="Brief description of the vaccine, its purpose, and any notes..."></textarea>
+                                    <textarea class="form-control" name="description" id="description" rows="4" placeholder="Brief description of the vaccine, its purpose, and any notes..."></textarea>
                                 </div>
                             </div>
                         </div>
@@ -111,9 +101,9 @@ include '../includes/sidebar.php';
                         <div class="card-body p-4">
                             <div class="mb-0">
                                 <label for="availabilityStatus" class="form-label fw-semibold">Availability Status</label>
-                                <select class="form-select" id="availabilityStatus">
-                                    <option value="Available" selected>Available</option>
-                                    <option value="Unavailable">Unavailable</option>
+                                <select class="form-select" name="availability_status" id="availabilityStatus">
+                                    <option value="available" selected>Available</option>
+                                    <option value="unavailable">Unavailable</option>
                                 </select>
                             </div>
                         </div>
@@ -123,7 +113,7 @@ include '../includes/sidebar.php';
                     <div class="card border-0 shadow-sm">
                         <div class="card-body p-4">
                             <div class="d-grid gap-2">
-                                <button type="submit" class="btn btn-primary btn-lg fw-bold">
+                                <button type="submit" name="add_btn" class="btn btn-primary btn-lg fw-bold">
                                     <i class="fas fa-plus-circle me-2"></i>Add Vaccine
                                 </button>
                                 <button type="reset" class="btn btn-outline-secondary">
@@ -144,52 +134,42 @@ include '../includes/sidebar.php';
 document.addEventListener('DOMContentLoaded', function() {
     // Get the form and alert elements
     const form = document.getElementById('addVaccineForm');
-    const successAlert = document.getElementById('successAlert');
-    const errorAlert = document.getElementById('errorAlert');
 
     // Handle form submission for UI feedback
     form.addEventListener('submit', function(event) {
-        // Prevent the default form submission
-        event.preventDefault();
-        event.stopPropagation();
-
-        // Hide alerts initially
-        successAlert.classList.add('d-none');
-        errorAlert.classList.add('d-none');
-
-        // Check form validity using Bootstrap's built-in method
-        if (form.checkValidity()) {
-            // If the form is valid, show a success message (simulation)
-            console.log('Form is valid. Simulating submission...');
-            
-            // Show success alert
-            successAlert.classList.remove('d-none');
-            
-            // Scroll to the top to make the alert visible
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-
-            // Reset the form after a short delay
-            setTimeout(() => {
-                form.reset();
-                form.classList.remove('was-validated');
-            }, 2000);
-
-        } else {
-            // If the form is invalid, show an error message
-            console.log('Form is invalid.');
-            errorAlert.classList.remove('d-none');
+        if (!form.checkValidity()) {
+            event.preventDefault();
+            event.stopPropagation();
+            showAlert("Error! Please fill out all required fields correctly.", "danger");
         }
-
-        // Add Bootstrap's 'was-validated' class to show validation feedback
         form.classList.add('was-validated');
     });
 
-    // Optional: Reset validation state when the reset button is clicked
-    form.addEventListener('reset', function() {
-        form.classList.remove('was-validated');
-        successAlert.classList.add('d-none');
-        errorAlert.classList.add('d-none');
-    });
+    // Alert Logic
+    const alertMsg = <?= json_encode($alert_msg) ?>;
+    const alertType = <?= json_encode($alert_type) ?>;
+    
+    if(alertMsg) {
+        showAlert(alertMsg, alertType);
+    }
+
+    function showAlert(message, type) {
+        const placeholder = document.getElementById('alertPlaceholder');
+        if(!placeholder) return;
+        
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = [
+            `<div class="alert alert-${type} alert-dismissible fade show border-0 shadow-sm rounded-3 py-3" role="alert">`,
+            `   <div class="d-flex align-items-center">`,
+            `       <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} fs-4 me-3"></i>`,
+            `       <div>${message}</div>`,
+            `   </div>`,
+            '   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>',
+            '</div>'
+        ].join('');
+        
+        placeholder.append(wrapper);
+    }
 });
 </script>
 

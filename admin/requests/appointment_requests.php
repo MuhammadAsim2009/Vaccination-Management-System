@@ -1,7 +1,104 @@
 <?php
+// Essential includes for authentication, header, sidebar, and database connection
+include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+
+// Handle Approval/Rejection Actions
+$action_msg = '';
+$action_type = '';
+
+// Handle Approval
+if (isset($_POST['approve_request_btn'])) {
+    $request_id = $_POST['request_id'];
+
+    // Start transaction to ensure both operations succeed or fail together
+    $conn->begin_transaction();
+
+    try {
+        // First, update the appointment status from 'requested' to 'approved'
+        $stmt_approved = $conn->prepare("UPDATE appointments SET status = 'approved' WHERE id = ? AND status = 'requested'");
+        $stmt_approved->bind_param("i", $request_id);
+        $stmt_approved->execute();
+
+        // Check if the update was successful
+        if ($stmt_approved->affected_rows > 0) {
+            // Fetch appointment details to create a schedule entry
+            $stmt_fetch = $conn->prepare("SELECT child_id, vaccine_id, hospital_id, appointment_date, dose_number FROM appointments WHERE id = ?");
+            $stmt_fetch->bind_param("i", $request_id);
+            $stmt_fetch->execute();
+            $appointment = $stmt_fetch->get_result()->fetch_assoc();
+            $stmt_fetch->close();
+
+            if ($appointment) {
+                $child_id = $appointment['child_id'];
+                $vaccine_id = $appointment['vaccine_id'];
+                $hospital_id = $appointment['hospital_id'];
+                $dose_number = $appointment['dose_number'];
+                $scheduled_date = date('Y-m-d H:i:s', strtotime($appointment['appointment_date']));
+
+                // Insert into vaccination_schedule table.
+                $stmt_schedule = $conn->prepare("INSERT INTO vaccination_schedule (child_id, vaccine_id, hospital_id, scheduled_date, dose_number) VALUES (?, ?, ?, ?, ?)");
+                $stmt_schedule->bind_param("iiisi", $child_id, $vaccine_id, $hospital_id, $scheduled_date, $dose_number);
+                $stmt_schedule->execute();
+                $stmt_schedule->close();
+
+                // Commit the transaction since all queries were successful
+                $conn->commit();
+                $action_msg = "Request #REQ-" . htmlspecialchars($request_id) . " approved and scheduled successfully.";
+                $action_type = "success";
+            } else {
+                // This case is unlikely if update succeeded, but it's a good safety check
+                $conn->rollback();
+                $action_msg = "Error: Could not retrieve appointment details for scheduling after approval.";
+                $action_type = "danger";
+            }
+        } else {
+            // If no rows were affected, the request might have been already processed or didn't exist.
+            $conn->rollback();
+            $action_msg = "Request could not be approved. It may have already been processed or does not exist.";
+            $action_type = "warning";
+        }
+        $stmt_approved->close();
+    } catch (Exception $e) {
+        // Rollback the transaction on any database error
+        $conn->rollback();
+        $action_msg = "A database error occurred during the approval process: " . $e->getMessage();
+        $action_type = "danger";
+    }
+}
+
+// Handle Rejection
+if (isset($_POST['reject_request_btn'])) {
+    $request_id = $_POST['request_id'];    
+    if ($stmt_rejected = $conn->prepare("UPDATE appointments SET status = 'rejected' WHERE id = ?")) {
+        $stmt_rejected->bind_param("i", $request_id);
+
+        if ($stmt_rejected->execute()) {
+            $action_msg = "Request #REQ-" . htmlspecialchars($request_id) . " rejected successfully.";
+            $action_type = "success";
+        } else {
+            $action_msg = "Error rejecting request: " . $stmt_rejected->error;
+            $action_type = "danger";
+        }
+    }
+}
+
+// Fetch appointment requests (Moved after update logic to show latest data)
+$stmt_requests = $conn->prepare("SELECT r.id, c.name AS child_name, u.name AS parent_name, v.vaccine_name, r.appointment_date, h.hospital_name, r.status FROM appointments r JOIN children c ON r.child_id = c.id JOIN parents p ON r.parent_id = p.id JOIN users u ON p.user_id = u.id JOIN vaccines v ON r.vaccine_id = v.id JOIN hospitals h ON r.hospital_id = h.id ORDER BY r.created_at DESC");
+$stmt_requests->execute();
+$result_requests = $stmt_requests->get_result();
+
+// Fetch statistics (Moved after update logic)
+$stmt_cards = $conn->prepare("SELECT COUNT(*) AS total_requests, SUM(status = 'approved') AS total_approved, SUM(status = 'requested') AS total_pending FROM appointments");
+$stmt_cards->execute();
+$result_cards = $stmt_cards->get_result()->fetch_assoc();
+
+$total_requests = $result_cards['total_requests'];
+$total_approved = $result_cards['total_approved'];
+$total_pending  = $result_cards['total_pending'];
+
 ?>
 
 <main class="main-content">
@@ -25,10 +122,10 @@ include '../includes/sidebar.php';
             </div>
         </div>
 
-        <!-- Alerts Placeholder (UI Only) -->
-        <div id="alertPlaceholder"></div>
+        <!-- Alerts Placeholder -->
+        <div id="alertPlaceholder"><?php if($action_msg): ?><div class="alert alert-<?= $action_type ?> alert-dismissible fade show border-0 shadow-sm rounded-4 py-3 px-4 mb-4" role="alert"><div class="d-flex align-items-center"><i class="fas fa-<?= $action_type == 'success' ? 'check-circle' : 'exclamation-circle' ?> me-3 fs-4"></i><div><?= $action_msg ?></div></div><button type="button" class="btn-close shadow-none" data-bs-dismiss="alert" aria-label="Close"></button></div><?php endif; ?></div>
 
-        <!-- Requests Statistics (Cards) -->
+        <!-- Requests Statistics -->
         <div class="row g-4 mb-4">
             <!-- Pending Requests Card -->
             <div class="col-12 col-sm-6 col-lg-4">
@@ -40,7 +137,7 @@ include '../includes/sidebar.php';
                                 <i class="fas fa-clock fs-4"></i>
                             </div>
                         </div>
-                        <h2 class="fw-bold mb-2">12</h2>
+                        <h2 class="fw-bold mb-2"><?= $total_pending ?></h2>
                         <div class="d-flex align-items-center text-warning small fw-medium">
                             <i class="fas fa-exclamation-circle me-1"></i>
                             <span>Action required</span>
@@ -54,12 +151,12 @@ include '../includes/sidebar.php';
                 <div class="card border-0 shadow-sm h-100 rounded-4">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="card-title text-muted text-uppercase mb-0 small fw-bold">Approved Today</h6>
+                            <h6 class="card-title text-muted text-uppercase mb-0 small fw-bold">Total Approved</h6>
                             <div class="bg-success bg-opacity-10 text-success rounded-3 p-2 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
                                 <i class="fas fa-check-circle fs-4"></i>
                             </div>
                         </div>
-                        <h2 class="fw-bold mb-2">45</h2>
+                        <h2 class="fw-bold mb-2"><?= $total_approved ?></h2>
                         <div class="d-flex align-items-center text-success small fw-medium">
                             <i class="fas fa-arrow-up me-1"></i>
                             <span>5 new since 8 AM</span>
@@ -78,7 +175,7 @@ include '../includes/sidebar.php';
                                 <i class="fas fa-calendar-alt fs-4"></i>
                             </div>
                         </div>
-                        <h2 class="fw-bold mb-2">156</h2>
+                        <h2 class="fw-bold mb-2"><?= $total_requests ?></h2>
                         <div class="d-flex align-items-center text-info small fw-medium">
                             <i class="fas fa-chart-line me-1"></i>
                             <span>15% growth this month</span>
@@ -121,131 +218,56 @@ include '../includes/sidebar.php';
                             </tr>
                         </thead>
                         <tbody>
-                            <!-- Dummy Row 1 -->
-                            <tr class="request-row" data-status="pending">
-                                <td class="ps-4 fw-medium">#REQ-8291</td>
+                            <?php if ($result_requests->num_rows > 0): ?>
+                            <?php while ($row = $result_requests->fetch_assoc()): 
+                                $status_badge = '';
+                                switch(strtolower($row['status'])) {
+                                    case 'approved': $status_badge = 'bg-success bg-opacity-10 text-success'; break;
+                                    case 'rejected': $status_badge = 'bg-danger bg-opacity-10 text-danger'; break;
+                                    default: $status_badge = 'bg-warning bg-opacity-10 text-warning'; break;
+                                }
+                                
+                                // Initials for avatar
+                                $initials = strtoupper(substr($row['child_name'], 0, 2));
+                                $avatar_colors = ['bg-primary', 'bg-success', 'bg-info', 'bg-warning', 'bg-danger'];
+                                $avatar_bg = $avatar_colors[array_rand($avatar_colors)];
+                            ?>
+                            <tr class="request-row" data-status="<?= strtolower($row['status']) ?>">
+                                <td class="ps-4 fw-medium">#REQ-<?= $row['id'] ?></td>
                                 <td>
                                     <div class="d-flex align-items-center">
-                                        <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">AM</div>
-                                        <span class="search-target">Ali Muhammad</span>
+                                        <div class="rounded-circle <?= $avatar_bg ?> bg-opacity-10 text-dark d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 0.8rem;"><?= $initials ?></div>
+                                        <span class="search-target"><?= htmlspecialchars($row['child_name']) ?></span>
                                     </div>
                                 </td>
-                                <td class="search-target">Muhammad Asif</td>
-                                <td class="search-target">Polio (OPV-1)</td>
-                                <td>Oct 12, 2024</td>
-                                <td class="search-target">Mayo Hospital</td>
+                                <td class="search-target"><?= htmlspecialchars($row['parent_name']) ?></td>
+                                <td class="search-target"><?= htmlspecialchars($row['vaccine_name']) ?></td>
+                                <td><?= date('M d, Y', strtotime($row['appointment_date'])) ?></td>
+                                <td class="search-target"><?= htmlspecialchars($row['hospital_name']) ?></td>
                                 <td class="text-center">
-                                    <span class="badge rounded-pill bg-warning bg-opacity-10 text-warning px-3 py-2 fw-medium">Pending</span>
+                                    <span class="badge rounded-pill <?= $status_badge ?> px-3 py-2 fw-medium"><?= ucfirst($row['status']) ?></span>
                                 </td>
                                 <td class="pe-4 text-center">
+                                    <?php if (strtolower($row['status']) === 'requested' || strtolower($row['status']) === 'pending'): ?>
                                     <div class="d-flex justify-content-center gap-2">
-                                        <button class="btn btn-sm btn-success rounded-3 px-3 shadow-none border-0" data-bs-toggle="modal" data-bs-target="#approveModal">
+                                        <button class="btn btn-sm btn-success rounded-3 px-3 shadow-none border-0" data-bs-toggle="modal" data-bs-target="#approveModal" onclick="setRequestId(<?= $row['id'] ?>)">
                                             <i class="fas fa-check me-1"></i> Approve
                                         </button>
-                                        <button class="btn btn-sm btn-danger rounded-3 px-3 shadow-none border-0" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                                        <button class="btn btn-sm btn-danger rounded-3 px-3 shadow-none border-0" data-bs-toggle="modal" data-bs-target="#rejectModal" onclick="setRequestId(<?= $row['id'] ?>)">
                                             <i class="fas fa-times me-1"></i> Reject
                                         </button>
                                     </div>
-                                </td>
-                            </tr>
-                            <!-- Dummy Row 2 -->
-                            <tr class="request-row" data-status="approved">
-                                <td class="ps-4 fw-medium">#REQ-8292</td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="rounded-circle bg-info bg-opacity-10 text-info d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">SK</div>
-                                        <span class="search-target">Sara Khan</span>
-                                    </div>
-                                </td>
-                                <td class="search-target">Ahmed Khan</td>
-                                <td class="search-target">BCG</td>
-                                <td>Oct 14, 2024</td>
-                                <td class="search-target">Jinnah Hospital</td>
-                                <td class="text-center">
-                                    <span class="badge rounded-pill bg-success bg-opacity-10 text-success px-3 py-2 fw-medium">Approved</span>
-                                </td>
-                                <td class="pe-4 text-center">
-                                    <button class="btn btn-sm btn-light text-muted rounded-3 px-3" disabled>
-                                        <i class="fas fa-check-double me-1"></i> Processed
-                                    </button>
-                                </td>
-                            </tr>
-                            <!-- Dummy Row 3 -->
-                            <tr class="request-row" data-status="rejected">
-                                <td class="ps-4 fw-medium">#REQ-8293</td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="rounded-circle bg-secondary bg-opacity-10 text-secondary d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">ZA</div>
-                                        <span class="search-target">Zainab Abbas</span>
-                                    </div>
-                                </td>
-                                <td class="search-target">Abbas Ali</td>
-                                <td class="search-target">Hepatitis B</td>
-                                <td>Oct 15, 2024</td>
-                                <td class="search-target">General Hospital</td>
-                                <td class="text-center">
-                                    <span class="badge rounded-pill bg-danger bg-opacity-10 text-danger px-3 py-2 fw-medium">Rejected</span>
-                                </td>
-                                <td class="pe-4 text-center">
-                                    <button class="btn btn-sm btn-light text-muted rounded-3 px-3" disabled>
-                                        <i class="fas fa-ban me-1"></i> Cancelled
-                                    </button>
-                                </td>
-                            </tr>
-                            <!-- Dummy Row 4 (New) -->
-                            <tr class="request-row" data-status="pending">
-                                <td class="ps-4 fw-medium">#REQ-8294</td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="rounded-circle bg-success bg-opacity-10 text-success d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">HA</div>
-                                        <span class="search-target">Hamza Amin</span>
-                                    </div>
-                                </td>
-                                <td class="search-target">Amin Butt</td>
-                                <td class="search-target">Pentavalent-1</td>
-                                <td>Oct 16, 2024</td>
-                                <td class="search-target">Services Hospital</td>
-                                <td class="text-center">
-                                    <span class="badge rounded-pill bg-warning bg-opacity-10 text-warning px-3 py-2 fw-medium">Pending</span>
-                                </td>
-                                <td class="pe-4 text-center">
-                                    <div class="d-flex justify-content-center gap-2">
-                                        <button class="btn btn-sm btn-success rounded-3 px-3 shadow-none border-0" data-bs-toggle="modal" data-bs-target="#approveModal">
-                                            <i class="fas fa-check me-1"></i> Approve
+                                    <?php else: ?>
+                                        <button class="btn btn-sm btn-light text-muted rounded-3 px-3" disabled>
+                                            <i class="fas fa-lock me-1"></i> <?= ucfirst($row['status']) ?>
                                         </button>
-                                        <button class="btn btn-sm btn-danger rounded-3 px-3 shadow-none border-0" data-bs-toggle="modal" data-bs-target="#rejectModal">
-                                            <i class="fas fa-times me-1"></i> Reject
-                                        </button>
-                                    </div>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
-                            <!-- Dummy Row 5 (New) -->
-                            <tr class="request-row" data-status="pending">
-                                <td class="ps-4 fw-medium">#REQ-8295</td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <div class="rounded-circle bg-warning bg-opacity-10 text-warning d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">FA</div>
-                                        <span class="search-target">Fatima Akram</span>
-                                    </div>
-                                </td>
-                                <td class="search-target">Muhammad Akram</td>
-                                <td class="search-target">Measles-1</td>
-                                <td>Oct 18, 2024</td>
-                                <td class="search-target">Fatima Memorial</td>
-                                <td class="text-center">
-                                    <span class="badge rounded-pill bg-warning bg-opacity-10 text-warning px-3 py-2 fw-medium">Pending</span>
-                                </td>
-                                <td class="pe-4 text-center">
-                                    <div class="d-flex justify-content-center gap-2">
-                                        <button class="btn btn-sm btn-success rounded-3 px-3 shadow-none border-0" data-bs-toggle="modal" data-bs-target="#approveModal">
-                                            <i class="fas fa-check me-1"></i> Approve
-                                        </button>
-                                        <button class="btn btn-sm btn-danger rounded-3 px-3 shadow-none border-0" data-bs-toggle="modal" data-bs-target="#rejectModal">
-                                            <i class="fas fa-times me-1"></i> Reject
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
+                            <?php endwhile; ?>
+                            <?php else: ?>
+                                <tr><td colspan="8" class="text-center py-4 text-muted">No appointment requests found.</td></tr>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
@@ -255,13 +277,12 @@ include '../includes/sidebar.php';
                 <nav aria-label="Page navigation">
                     <ul class="pagination justify-content-between align-items-center mb-0">
                         <li class="page-item disabled">
-                            <span class="text-muted small">Showing 1 to 5 of 12 requests</span>
+                            <span class="text-muted small">Showing all records</span>
                         </li>
                         <div class="d-flex gap-2">
-                            <li class="page-item"><a class="page-link border-0 bg-light rounded-3 px-3 text-dark" href="#"><i class="fas fa-chevron-left me-1"></i> Previous</a></li>
+                            <li class="page-item disabled"><a class="page-link border-0 bg-light rounded-3 px-3 text-dark" href="#"><i class="fas fa-chevron-left me-1"></i> Previous</a></li>
                             <li class="page-item active"><a class="page-link border-0 rounded-3 px-3" href="#">1</a></li>
-                            <li class="page-item"><a class="page-link border-0 bg-light rounded-3 px-3 text-dark" href="#">2</a></li>
-                            <li class="page-item"><a class="page-link border-0 bg-light rounded-3 px-3 text-dark" href="#">Next <i class="fas fa-chevron-right ms-1"></i></a></li>
+                            <li class="page-item disabled"><a class="page-link border-0 bg-light rounded-3 px-3 text-dark" href="#">Next <i class="fas fa-chevron-right ms-1"></i></a></li>
                         </div>
                     </ul>
                 </nav>
@@ -281,10 +302,14 @@ include '../includes/sidebar.php';
                 </div>
                 <h4 class="fw-bold mb-3">Approve Request?</h4>
                 <p class="text-muted mb-4">Are you sure you want to approve this appointment request? This will schedule the vaccination for the selected date.</p>
-                <div class="d-flex justify-content-center gap-3">
-                    <button type="button" class="btn btn-light px-4 py-2 rounded-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-success px-4 py-2 rounded-3" data-bs-dismiss="modal" onclick="showAlert('success', 'Request approved successfully!')">Confirm Approval</button>
-                </div>
+                <form method="POST">
+                    <input type="hidden" name="request_id" id="approveRequestId">
+                    <input type="hidden" name="approve_request_btn" value="1">
+                    <div class="d-flex justify-content-center gap-3">
+                        <button type="button" class="btn btn-light px-4 py-2 rounded-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success px-4 py-2 rounded-3">Confirm Approval</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -300,20 +325,32 @@ include '../includes/sidebar.php';
                 </div>
                 <h4 class="fw-bold mb-3">Reject Request?</h4>
                 <p class="text-muted mb-4">Are you sure you want to reject this appointment request? This action cannot be undone.</p>
-                <div class="mb-4 text-start">
-                    <label class="form-label small fw-semibold text-muted">Reason for Rejection</label>
-                    <textarea class="form-control bg-light border-0 shadow-none" rows="3" placeholder="Enter reason..."></textarea>
-                </div>
-                <div class="d-flex justify-content-center gap-3">
-                    <button type="button" class="btn btn-light px-4 py-2 rounded-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-danger px-4 py-2 rounded-3" data-bs-dismiss="modal" onclick="showAlert('danger', 'Request rejected.')">Confirm Rejection</button>
-                </div>
+                <form method="POST">
+                    <input type="hidden" name="request_id" id="rejectRequestId">
+                    <input type="hidden" name="reject_request_btn" value="1">
+                    <div class="mb-4 text-start">
+                        <label class="form-label small fw-semibold text-muted">Reason for Rejection</label>
+                        <textarea class="form-control bg-light border-0 shadow-none" name="rejection_reason" rows="3" placeholder="Enter reason..."></textarea>
+                    </div>
+                    <div class="d-flex justify-content-center gap-3">
+                        <button type="button" class="btn btn-light px-4 py-2 rounded-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger px-4 py-2 rounded-3">Confirm Rejection</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 </div>
 
 <script>
+// Helper to pass ID to modals (if you implement backend logic later)
+function setRequestId(id) {
+    // You can set this ID to a hidden input field in the modal form
+    console.log("Selected Request ID: " + id);
+    document.getElementById('approveRequestId').value = id;
+    document.getElementById('rejectRequestId').value = id;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
     const statusFilter = document.getElementById('statusFilter');
