@@ -59,6 +59,17 @@ if(isset($_POST['register_btn'])) {
         $stmt_hospital->execute();
         $stmt_hospital->close();
 
+        // Send notification to admin
+        $notification_type = 'new_registration';
+        $notification_title = 'New Hospital Registration';
+        $notification_message = "A new hospital, " . htmlspecialchars($hospital_name) . ", has registered and is pending approval.";
+        $notification_user_type = 'admin';
+
+        $stmt_notification = $conn->prepare("INSERT INTO notifications (user_type, user_id, type, title, message) VALUES (?, ?, ?, ?, ?)");
+        $stmt_notification->bind_param("sisss", $notification_user_type, $user_id, $notification_type, $notification_title, $notification_message);
+        $stmt_notification->execute();
+        $stmt_notification->close();
+
         // Commit transaction
         $conn->commit();
 

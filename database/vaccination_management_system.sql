@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Feb 18, 2026 at 07:17 AM
+-- Generation Time: Feb 18, 2026 at 04:14 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -97,6 +97,23 @@ INSERT INTO `hospitals` (`id`, `user_id`, `hospital_name`, `registration_no`, `p
 (1, 3, 'City Hospital', 'REG-1001', '03073469181', 'Sachal Colony, Larkana', 'approved', '2026-02-03 04:06:32'),
 (2, 5, 'Ali Hospital', 'REG-1002', '03337559726', 'Wagan Road, Larkana', 'approved', '2026-02-03 06:45:45'),
 (4, 8, 'National Hospital', 'REG-1003', '03115873912', 'Near Degree College, Nazar Muhalla, Larkana', 'approved', '2026-02-17 13:39:48');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `notifications`
+--
+
+CREATE TABLE `notifications` (
+  `id` int(11) NOT NULL,
+  `user_type` enum('admin','hospital','parent') NOT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `type` varchar(50) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `message` text NOT NULL,
+  `status` enum('unread','read') NOT NULL DEFAULT 'unread',
+  `created_at` datetime NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -255,6 +272,13 @@ ALTER TABLE `hospitals`
   ADD UNIQUE KEY `registration_no` (`registration_no`);
 
 --
+-- Indexes for table `notifications`
+--
+ALTER TABLE `notifications`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fk_user` (`user_id`);
+
+--
 -- Indexes for table `parents`
 --
 ALTER TABLE `parents`
@@ -313,6 +337,12 @@ ALTER TABLE `hospitals`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
+-- AUTO_INCREMENT for table `notifications`
+--
+ALTER TABLE `notifications`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `parents`
 --
 ALTER TABLE `parents`
@@ -366,6 +396,12 @@ ALTER TABLE `children`
 --
 ALTER TABLE `hospitals`
   ADD CONSTRAINT `hospitals_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `notifications`
+--
+ALTER TABLE `notifications`
+  ADD CONSTRAINT `fk_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
 -- Constraints for table `parents`
