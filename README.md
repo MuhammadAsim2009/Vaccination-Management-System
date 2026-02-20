@@ -2,8 +2,6 @@
 
 A comprehensive web-based platform designed to streamline the process of child vaccination by connecting parents, hospitals, and administrators. VMS provides a centralized system for managing vaccination records, scheduling appointments, and monitoring immunization coverage.
 
- <!-- Replace with a screenshot of your index.php -->
-
 ## ✨ Key Features
 
 *   **Role-Based Access Control:** Separate, secure dashboards for Parents, Hospitals, and Administrators.
@@ -101,6 +99,7 @@ The project follows a modular structure based on user roles:
 │   ├── export/
 │   ├── hospitals/
 │   ├── includes/         # Header, sidebar, auth check for admin
+│   ├── notifications/
 │   ├── profile/
 │   ├── requests/
 │   ├── vaccination/
@@ -110,8 +109,9 @@ The project follows a modular structure based on user roles:
 │   ├── css/
 │   └── js/
 ├── auth/                 # Login, register, logout files
-├── config/               # Database configuration
-│   └── db.php
+├── config/               # Database configuration & functions
+│   ├── db.php
+│   └── functions.php
 ├── hospital/             # Hospital panel files
 │   ├── includes/
 │   ├── notifications/

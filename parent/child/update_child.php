@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 // Initialize variables
 $child = null;
@@ -34,6 +35,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt_update->bind_param("ssssii", $full_name, $dob, $gender, $blood_group, $child_id, $parent_id);
 
         if ($stmt_update->execute()) {
+            // Trigger Notification to Admin
+            $parent_name = $_SESSION['name'];
+            send_notification($conn, 'admin', null, $parent_id, 'system', 'Child Profile Updated', "Parent '$parent_name' updated details for child '$full_name'.");
+
             $alert_msg = "Child details have been updated successfully!";
             $alert_type = "success";
         } else {

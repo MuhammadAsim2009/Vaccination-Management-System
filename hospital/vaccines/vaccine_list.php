@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 // Fetch data from datebase
 $stmt_vaccine = $conn->prepare("SELECT * FROM vaccines");
@@ -37,9 +38,24 @@ $delete_type = '';
 if(isset($_POST['delete_btn'])) {
     $vaccine_id = $_POST['vaccine_id'];
     
+    // Fetch vaccine name for notification before deletion
+    $stmt_name = $conn->prepare("SELECT vaccine_name FROM vaccines WHERE id = ?");
+    $stmt_name->bind_param("i", $vaccine_id);
+    $stmt_name->execute();
+    $res_name = $stmt_name->get_result();
+    $vaccine_name = ($res_name->num_rows > 0) ? $res_name->fetch_assoc()['vaccine_name'] : 'Unknown Vaccine';
+    $stmt_name->close();
+
     $stmt_delete = $conn->prepare("DELETE FROM vaccines WHERE id = ?");
     $stmt_delete->bind_param("i", $vaccine_id);
     if($stmt_delete->execute()) {
+        // Trigger Notification to Admin
+        $user_id = $_SESSION['user_id'];
+        $hospital_name = $_SESSION['name'];
+        $notif_title = "Vaccine Deleted";
+        $notif_message = "Hospital '$hospital_name' deleted vaccine: " . htmlspecialchars($vaccine_name) . ".";
+        send_notification($conn, 'admin', null, $user_id, 'vaccination', $notif_title, $notif_message);
+
         $delete_msg = "Vaccine deleted successfully.";
         $delete_type = "success";
     } else {

@@ -470,11 +470,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         tableRows.forEach(row => {
             if (row.style.display !== 'none') {
-                total++;
                 const status = row.getAttribute('data-status');
-                if (status === 'Completed') completed++;
-                else if (status === 'Pending') pending++;
-                else if (status === 'Missed') missed++;
+                if (status) {
+                    total++;
+                    if (status === 'Completed') completed++;
+                    else if (status === 'Pending') pending++;
+                    else if (status === 'Missed') missed++;
+                }
             }
         });
 

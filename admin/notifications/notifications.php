@@ -1,132 +1,86 @@
 <?php
-/**
- * Admin Notifications Page
- * 
- * Displays system-wide notifications for the admin including registration requests,
- * appointment alerts, and system messages.
- * 
- * Path: admin/notifications/notifications.php
- */
-
+include '../../config/db.php';
+include '../../config/functions.php';
 include '../includes/auth_check.php';
+
+// --- Handle AJAX Actions ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    header('Content-Type: application/json');
+    $action = $_POST['action'];
+    $id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+    $user_type = 'admin';
+
+    if ($action === 'mark_read' && $id) {
+        $stmt = $conn->prepare("UPDATE notifications SET status = 'read' WHERE id = ? AND user_type = ?");
+        $stmt->bind_param("is", $id, $user_type);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+    
+    if ($action === 'delete' && $id) {
+        $stmt = $conn->prepare("DELETE FROM notifications WHERE id = ? AND user_type = ?");
+        $stmt->bind_param("is", $id, $user_type);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+
+    if ($action === 'mark_all_read') {
+        $stmt = $conn->prepare("UPDATE notifications SET status = 'read' WHERE user_type = ? AND status = 'unread'");
+        $stmt->bind_param("s", $user_type);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+
+    if ($action === 'clear_all') {
+        $stmt = $conn->prepare("DELETE FROM notifications WHERE user_type = ?");
+        $stmt->bind_param("s", $user_type);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+    exit;
+}
+
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// --------------------------------------------------------------------------
-// Dummy Data Generation
-// --------------------------------------------------------------------------
-$notifications = [
-    [
-        'id' => 1,
-        'category' => 'hospitals',
-        'title' => 'New Hospital Registration',
-        'message' => 'City General Hospital (Larkana) has submitted a registration request. Please review documents.',
-        'time' => '10 mins ago',
-        'datetime' => 'Oct 25, 2023 09:30 AM',
-        'status' => 'unread',
-        'icon' => 'fa-hospital',
-        'color_class' => 'primary'
-    ],
-    [
-        'id' => 2,
-        'category' => 'appointments',
-        'title' => 'Urgent Appointment Alert',
-        'message' => 'High priority vaccination request for Child: Sarah Ahmed (Polio - Dose 1).',
-        'time' => '45 mins ago',
-        'datetime' => 'Oct 25, 2023 08:45 AM',
-        'status' => 'unread',
-        'icon' => 'fa-calendar-check',
-        'color_class' => 'warning'
-    ],
-    [
-        'id' => 3,
-        'category' => 'system',
-        'title' => 'System Update Required',
-        'message' => 'Server security patch v2.4 is available. Scheduled maintenance recommended.',
-        'time' => '2 hours ago',
-        'datetime' => 'Oct 25, 2023 07:15 AM',
-        'status' => 'unread',
-        'icon' => 'fa-server',
-        'color_class' => 'danger'
-    ],
-    [
-        'id' => 4,
-        'category' => 'parents',
-        'title' => 'New Parent Registration',
-        'message' => 'New parent account created: John Doe (john.doe@example.com).',
-        'time' => '5 hours ago',
-        'datetime' => 'Oct 24, 2023 04:20 PM',
-        'status' => 'read',
-        'icon' => 'fa-user-plus',
-        'color_class' => 'info'
-    ],
-    [
-        'id' => 5,
-        'category' => 'vaccinations',
-        'title' => 'Vaccination Batch Update',
-        'message' => 'Batch #9921 (Pfizer) inventory updated by Metro Health Center.',
-        'time' => '1 day ago',
-        'datetime' => 'Oct 24, 2023 10:00 AM',
-        'status' => 'read',
-        'icon' => 'fa-syringe',
-        'color_class' => 'success'
-    ]
-];
+// Fetch Notifications from Database
+$notifications = [];
+$admin_id = $_SESSION['user_id'];
+$stmt = $conn->prepare("SELECT * FROM notifications WHERE user_type = 'admin' AND (recipient_id = ? OR recipient_id IS NULL) ORDER BY created_at DESC");
+$stmt->bind_param("i", $admin_id);
+$stmt->execute();
+$result = $stmt->get_result();
 
-// Generate additional dummy items
-for ($i = 6; $i <= 15; $i++) {
-    $types = ['hospitals', 'parents', 'appointments', 'system', 'vaccinations'];
-    $type = $types[array_rand($types)];
-    $status = ($i % 3 == 0) ? 'unread' : 'read';
+while ($row = $result->fetch_assoc()) {
+    // Map DB types to UI styles
+    $icon = 'fa-bell';
+    $color = 'primary';
     
-    $item = [
-        'id' => $i,
-        'category' => $type,
-        'time' => $i . ' days ago',
-        'datetime' => date('M d, Y h:i A', strtotime("-{$i} days")),
-        'status' => $status
-    ];
-
-    switch ($type) {
-        case 'hospitals':
-            $item['title'] = 'Hospital Profile Update';
-            $item['message'] = 'Al-Shifa Medical Center updated their contact information.';
-            $item['icon'] = 'fa-hospital-user';
-            $item['color_class'] = 'primary';
-            break;
-        case 'parents':
-            $item['title'] = 'Parent Profile Verification';
-            $item['message'] = 'Parent ID #4421 uploaded verification documents.';
-            $item['icon'] = 'fa-id-card';
-            $item['color_class'] = 'info';
-            break;
-        case 'appointments':
-            $item['title'] = 'Appointment Cancelled';
-            $item['message'] = 'Appointment #992 cancelled by parent. Slot freed.';
-            $item['icon'] = 'fa-calendar-times';
-            $item['color_class'] = 'warning';
-            break;
-        case 'system':
-            $item['title'] = 'Database Backup';
-            $item['message'] = 'Weekly automated database backup completed successfully.';
-            $item['icon'] = 'fa-database';
-            $item['color_class'] = 'secondary';
-            break;
-        case 'vaccinations':
-            $item['title'] = 'Vaccine Stock Low';
-            $item['message'] = 'Stock alert: Hepatitis B vaccine running low in Central Region.';
-            $item['icon'] = 'fa-vials';
-            $item['color_class'] = 'success';
-            break;
+    switch($row['type']) {
+        case 'appointment': $icon = 'fa-calendar-check'; $color = 'warning'; break;
+        case 'vaccination': $icon = 'fa-syringe'; $color = 'success'; break;
+        case 'system': $icon = 'fa-info-circle'; $color = 'info'; break;
+        case 'message': $icon = 'fa-envelope'; $color = 'secondary'; break;
     }
-    $notifications[] = $item;
+
+    $notifications[] = [
+        'id' => $row['id'],
+        'category' => $row['type'], // appointment, vaccination, system
+        'title' => $row['title'],
+        'message' => $row['message'],
+        'time' => time_elapsed_string($row['created_at']),
+        'datetime' => date('M d, Y h:i A', strtotime($row['created_at'])),
+        'status' => $row['status'],
+        'icon' => $icon,
+        'color_class' => $color
+    ];
 }
 
 // Calculate Stats
 $total = count($notifications);
 $unread = count(array_filter($notifications, fn($n) => $n['status'] === 'unread'));
-$hospital_reqs = count(array_filter($notifications, fn($n) => $n['category'] === 'hospitals'));
-$appt_alerts = count(array_filter($notifications, fn($n) => $n['category'] === 'appointments'));
+$system_msgs = count(array_filter($notifications, fn($n) => $n['category'] === 'system'));
+$appt_alerts = count(array_filter($notifications, fn($n) => $n['category'] === 'appointment'));
 ?>
 
 <main class="main-content">
@@ -192,13 +146,13 @@ $appt_alerts = count(array_filter($notifications, fn($n) => $n['category'] === '
                 <div class="card border-0 shadow-sm h-100 rounded-4">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h6 class="card-title text-muted text-uppercase mb-0 small fw-bold">Hospital Requests</h6>
+                            <h6 class="card-title text-muted text-uppercase mb-0 small fw-bold">System Alerts</h6>
                             <div class="bg-info bg-opacity-10 text-info rounded-3 p-2 d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
-                                <i class="fas fa-hospital-user fs-4"></i>
+                                <i class="fas fa-server fs-4"></i>
                             </div>
                         </div>
-                        <h2 class="fw-bold mb-0"><?= $hospital_reqs ?></h2>
-                        <small class="text-info fw-medium">Pending approvals</small>
+                        <h2 class="fw-bold mb-0"><?= $system_msgs ?></h2>
+                        <small class="text-info fw-medium">Updates & Logs</small>
                     </div>
                 </div>
             </div>
@@ -226,9 +180,8 @@ $appt_alerts = count(array_filter($notifications, fn($n) => $n['category'] === '
                 <div class="d-flex flex-wrap gap-2" id="notificationFilters">
                     <button class="btn btn-sm btn-primary px-3 rounded-pill filter-btn active" data-filter="all">All</button>
                     <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="unread">Unread</button>
-                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="hospitals">Hospitals</button>
-                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="parents">Parents</button>
-                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="appointments">Appointments</button>
+                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="appointment">Appointments</button>
+                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="vaccination">Vaccinations</button>
                     <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="system">System</button>
                 </div>
             </div>
@@ -293,7 +246,7 @@ $appt_alerts = count(array_filter($notifications, fn($n) => $n['category'] === '
                 </div>
 
                 <!-- 6️⃣ Empty State (Hidden by default) -->
-                <div id="emptyState" class="text-center py-5 d-none">
+                <div id="emptyState" class="text-center py-5 <?= empty($notifications) ? '' : 'd-none' ?>">
                     <div class="mb-3">
                         <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
                             <i class="far fa-bell-slash fa-3x text-muted"></i>
@@ -401,6 +354,15 @@ $appt_alerts = count(array_filter($notifications, fn($n) => $n['category'] === '
         // --- Mark as Read Logic ---
         function markAsRead(item) {
             if (item.getAttribute('data-status') === 'unread') {
+                const id = item.getAttribute('data-id');
+                
+                // AJAX Call
+                const formData = new FormData();
+                formData.append('action', 'mark_read');
+                formData.append('id', id);
+                fetch('notifications.php', { method: 'POST', body: formData });
+
+                // UI Update
                 item.setAttribute('data-status', 'read');
                 item.classList.remove('unread');
                 item.classList.add('read');
@@ -427,6 +389,11 @@ $appt_alerts = count(array_filter($notifications, fn($n) => $n['category'] === '
 
         // Mark All as Read
         document.getElementById('markAllReadBtn').addEventListener('click', () => {
+            // AJAX Call
+            const formData = new FormData();
+            formData.append('action', 'mark_all_read');
+            fetch('notifications.php', { method: 'POST', body: formData });
+            
             items.forEach(item => markAsRead(item));
         });
 
@@ -436,6 +403,13 @@ $appt_alerts = count(array_filter($notifications, fn($n) => $n['category'] === '
                 e.stopPropagation(); // Prevent modal opening
                 if(confirm('Are you sure you want to delete this notification?')) {
                     const item = this.closest('.notification-item');
+                    const id = item.getAttribute('data-id');
+
+                    // AJAX Call
+                    const formData = new FormData();
+                    formData.append('action', 'delete');
+                    formData.append('id', id);
+                    fetch('notifications.php', { method: 'POST', body: formData });
                     
                     // If deleting unread, update counter
                     if(item.getAttribute('data-status') === 'unread') {
@@ -460,6 +434,11 @@ $appt_alerts = count(array_filter($notifications, fn($n) => $n['category'] === '
         // Clear All
         document.getElementById('clearAllBtn').addEventListener('click', () => {
             if(confirm('Are you sure you want to clear all notifications?')) {
+                // AJAX Call
+                const formData = new FormData();
+                formData.append('action', 'clear_all');
+                fetch('notifications.php', { method: 'POST', body: formData });
+
                 items.forEach(item => item.remove());
                 document.getElementById('statTotal').innerText = '0';
                 document.getElementById('statUnread').innerText = '0';

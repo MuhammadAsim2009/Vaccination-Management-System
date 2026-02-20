@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 // Check if vaccine ID is provided
 if (!isset($_GET['id']) || empty($_GET['id'])) {
@@ -48,6 +49,13 @@ if(isset($_POST['update_btn'])) {
     $stmt_update = $conn->prepare("UPDATE vaccines SET vaccine_name = ?, target_age_group = ?, total_dose = ?, availability_status = ?, description = ? WHERE id = ?");
     $stmt_update->bind_param("ssissi", $name, $age_group, $doses, $status, $description, $vaccine_id);
     if($stmt_update->execute()) {
+        // Trigger Notification to Admin
+        $user_id = $_SESSION['user_id'];
+        $hospital_name = $_SESSION['name'];
+        $notif_title = "Vaccine Updated";
+        $notif_message = "Hospital '$hospital_name' updated details for vaccine: " . htmlspecialchars($name) . ".";
+        send_notification($conn, 'admin', null, $user_id, 'vaccination', $notif_title, $notif_message);
+
         $update_msg = "Vaccine details updated successfully.";
         $update_type = "success";
         

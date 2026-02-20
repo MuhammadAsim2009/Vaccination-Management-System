@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 if (!isset($_POST['hospital_id']) || empty($_POST['hospital_id'])) {
     echo "<div class='alert alert-danger m-4 text-center'>Invalid hospital ID.</div>";
@@ -17,12 +18,13 @@ $hospital_id = $_POST['hospital_id'];
 // Handle Final Deletion
 if (isset($_POST['perform_delete'])) {
     // 1. Get User ID associated with hospital to delete user account as well
-    $stmt_get_user = $conn->prepare("SELECT user_id FROM hospitals WHERE id = ?");
+    $stmt_get_user = $conn->prepare("SELECT user_id, hospital_name FROM hospitals WHERE id = ?");
     $stmt_get_user->bind_param("i", $hospital_id);
     $stmt_get_user->execute();
     $res_user = $stmt_get_user->get_result();
     
     if ($row_user = $res_user->fetch_assoc()) {
+        $hospital_name = $row_user['hospital_name'];
         $user_id = $row_user['user_id'];
         
         // 2. Delete Hospital Record
@@ -34,6 +36,13 @@ if (isset($_POST['perform_delete'])) {
         $stmt_del_user = $conn->prepare("DELETE FROM users WHERE id = ?");
         $stmt_del_user->bind_param("i", $user_id);
         $stmt_del_user->execute();
+
+        // 4. Trigger Notification (Log Admin Action)
+        $admin_id = $_SESSION['user_id'];
+        $admin_name = $_SESSION['name'];
+        $notif_title = "Hospital Deleted";
+        $notif_message = "Admin '$admin_name' deleted hospital '" . htmlspecialchars($hospital_name) . "'.";
+        send_notification($conn, 'admin', null, $admin_id, 'system', $notif_title, $notif_message);
     }
 
     // Redirect to list with success message

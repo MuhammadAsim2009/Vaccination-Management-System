@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Feb 18, 2026 at 04:14 PM
+-- Generation Time: Feb 20, 2026 at 12:43 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -107,6 +107,7 @@ INSERT INTO `hospitals` (`id`, `user_id`, `hospital_name`, `registration_no`, `p
 CREATE TABLE `notifications` (
   `id` int(11) NOT NULL,
   `user_type` enum('admin','hospital','parent') NOT NULL,
+  `recipient_id` int(11) DEFAULT NULL,
   `user_id` int(11) DEFAULT NULL,
   `type` varchar(50) NOT NULL,
   `title` varchar(255) NOT NULL,
@@ -276,7 +277,8 @@ ALTER TABLE `hospitals`
 --
 ALTER TABLE `notifications`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `fk_user` (`user_id`);
+  ADD KEY `fk_user` (`user_id`),
+  ADD KEY `recipient_idx` (`user_type`,`recipient_id`);
 
 --
 -- Indexes for table `parents`

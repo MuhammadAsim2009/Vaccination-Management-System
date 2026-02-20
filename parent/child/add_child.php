@@ -5,6 +5,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 // Fetch parent information
 $stmt_parent = $conn->prepare("SELECT u.name, u.email, p.phone FROM parents p JOIN users u ON p.user_id = u.id WHERE p.user_id = ?");
@@ -34,6 +35,12 @@ if(isset($_POST['add_child'])) {
     $stmt->bind_param("issss", $parent_id, $full_name, $dob, $gender, $blood_group);
 
     if($stmt->execute()) {
+        // Trigger Notification to Admin
+        $child_id = $conn->insert_id;
+        $notif_title = "New Child Added";
+        $notif_message = "Parent " . htmlspecialchars($parent_name) . " added a new child: " . htmlspecialchars($full_name) . ".";
+        send_notification($conn, 'admin', null, $parent_id, 'system', $notif_title, $notif_message);
+
         // Show success alert and redirect to children list after a short delay
         echo "<script>
         document.addEventListener('DOMContentLoaded', function() {

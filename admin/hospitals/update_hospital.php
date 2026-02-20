@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 // Get hospital ID from URL
 $hospital_id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
@@ -39,6 +40,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt_update = $conn->prepare("UPDATE hospitals SET hospital_name = ?, phone = ?, address = ?, status = ? WHERE id = ?");
     $stmt_update->bind_param("ssssi", $hospital_name, $phone, $address, $status, $hospital_id);
     if($stmt_update->execute()) {
+        // Trigger Notification (Log Admin Action)
+        $admin_id = $_SESSION['user_id'];
+        $admin_name = $_SESSION['name'];
+        $notif_title = "Hospital Details Updated";
+        $notif_message = "Admin '$admin_name' updated details for Hospital '" . htmlspecialchars($hospital_name) . "'. Status set to '$status'.";
+        send_notification($conn, 'admin', null, $admin_id, 'system', $notif_title, $notif_message);
+
         $update_success = true;
         // Refresh data
         $hospital['hospital_name'] = $hospital_name;

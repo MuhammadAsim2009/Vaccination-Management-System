@@ -2,6 +2,7 @@
 ob_start(); // Start output buffering to prevent header errors
 include '../../config/db.php';
 include '../includes/auth_check.php';
+include '../../config/functions.php';
 
 // Fetch Hospital ID
 $user_id = $_SESSION['user_id'];
@@ -38,7 +39,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Verify that this schedule belongs to the logged-in hospital
-    $check_stmt = $conn->prepare("SELECT id, child_id, vaccine_id, dose_number FROM vaccination_schedule WHERE id = ? AND hospital_id = ?");
+    $check_stmt = $conn->prepare("SELECT 
+            vs.id, 
+            vs.child_id, 
+            vs.vaccine_id, 
+            vs.dose_number, 
+            c.parent_id,
+            c.name AS child_name,
+            v.vaccine_name
+        FROM vaccination_schedule vs 
+        JOIN children c ON vs.child_id = c.id
+        JOIN vaccines v ON vs.vaccine_id = v.id
+        WHERE vs.id = ? AND vs.hospital_id = ?
+    ");
     $check_stmt->bind_param("ii", $schedule_id, $hospital_id);
     $check_stmt->execute();
     $check_result = $check_stmt->get_result();
@@ -75,6 +88,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $rec_stmt->bind_param("iss", $appointment_id, $vaccination_date, $notes);
                 $rec_stmt->execute();
             }
+        }
+
+        // --- Trigger Notifications ---
+
+        // 1. To Admin
+        $notif_title_admin = "Vaccination Status Updated";
+        $notif_msg_admin = "Hospital '" . htmlspecialchars($_SESSION['name']) . "' updated status to '$status' for " . htmlspecialchars($schedule_data['child_name']) . " (Schedule ID: $schedule_id).";
+        send_notification($conn, 'admin', null, $user_id, 'vaccination', $notif_title_admin, $notif_msg_admin);
+
+        // 2. To Parent
+        if (isset($schedule_data['parent_id'])) {
+            $parent_user_id = $schedule_data['parent_id'];
+            $notif_title_parent = "Vaccination Update for " . htmlspecialchars($schedule_data['child_name']);
+            $notif_msg_parent = "The status for the " . htmlspecialchars($schedule_data['vaccine_name']) . " (Dose " . $schedule_data['dose_number'] . ") for your child, " . htmlspecialchars($schedule_data['child_name']) . ", has been updated to '" . ucfirst($status) . "'.";
+            if ($status === 'vaccinated' && !empty($notes)) {
+                $notif_msg_parent .= " Remarks: " . htmlspecialchars($notes);
+            }
+            send_notification($conn, 'parent', $parent_user_id, $user_id, 'vaccination', $notif_title_parent, $notif_msg_parent);
         }
 
         echo json_encode(['success' => true, 'message' => 'Status updated successfully.']);

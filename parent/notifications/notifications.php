@@ -1,153 +1,88 @@
 <?php
-/**
- * Parent Notifications Page
- * 
- * Displays notifications for the parent user including vaccination reminders,
- * appointment updates, missed vaccination alerts, and system messages.
- */
-
+include '../../config/db.php';
+include '../../config/functions.php';
 include '../includes/auth_check.php';
+
+// --- Handle AJAX Actions ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    header('Content-Type: application/json');
+    $action = $_POST['action'];
+    $id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+    $user_type = 'parent';
+    $user_id = $_SESSION['user_id'];
+
+    if ($action === 'mark_read' && $id) {
+        $stmt = $conn->prepare("UPDATE notifications SET status = 'read' WHERE id = ? AND user_type = ? AND recipient_id = ?");
+        $stmt->bind_param("isi", $id, $user_type, $user_id);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+    
+    if ($action === 'delete' && $id) {
+        $stmt = $conn->prepare("DELETE FROM notifications WHERE id = ? AND user_type = ? AND recipient_id = ?");
+        $stmt->bind_param("isi", $id, $user_type, $user_id);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+
+    if ($action === 'mark_all_read') {
+        $stmt = $conn->prepare("UPDATE notifications SET status = 'read' WHERE user_type = ? AND recipient_id = ? AND status = 'unread'");
+        $stmt->bind_param("si", $user_type, $user_id);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+
+    if ($action === 'clear_all') {
+        $stmt = $conn->prepare("DELETE FROM notifications WHERE user_type = ? AND recipient_id = ?");
+        $stmt->bind_param("si", $user_type, $user_id);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+    exit;
+}
+
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// --------------------------------------------------------------------------
-// Dummy Data Generation
-// --------------------------------------------------------------------------
-$notifications = [
-    [
-        'id' => 1,
-        'type' => 'vaccination',
-        'category' => 'vaccination',
-        'title' => 'Upcoming Vaccination: Polio',
-        'child_name' => 'Ali Khan',
-        'vaccine_name' => 'Polio (OPV)',
-        'due_date' => '2023-11-05',
-        'message' => 'Reminder: Ali is due for the Polio vaccination on Nov 5th. Please schedule an appointment.',
-        'time' => '2 hours ago',
-        'datetime' => '2023-10-25 09:30',
-        'status' => 'unread',
-        'icon' => 'fa-syringe',
-        'bg' => 'bg-soft-warning',
-        'text' => 'text-warning'
-    ],
-    [
-        'id' => 2,
-        'type' => 'appointment',
-        'category' => 'appointments',
-        'title' => 'Appointment Confirmed',
-        'child_name' => 'Sarah Connor',
-        'vaccine_name' => 'Measles',
-        'due_date' => '2023-10-28',
-        'message' => 'Your appointment for Sarah (Measles) has been confirmed for Oct 28th at 10:00 AM at City Hospital.',
-        'time' => '5 hours ago',
-        'datetime' => '2023-10-25 06:15',
-        'status' => 'unread',
-        'icon' => 'fa-calendar-check',
-        'bg' => 'bg-soft-success',
-        'text' => 'text-success'
-    ],
-    [
-        'id' => 3,
-        'type' => 'missed',
-        'category' => 'vaccination',
-        'title' => 'Missed Vaccination Alert',
-        'child_name' => 'John Doe',
-        'vaccine_name' => 'BCG',
-        'due_date' => '2023-10-20',
-        'message' => 'URGENT: John missed the BCG vaccination scheduled for Oct 20th. Please reschedule immediately.',
-        'time' => '1 day ago',
-        'datetime' => '2023-10-24 14:00',
-        'status' => 'unread',
-        'icon' => 'fa-exclamation-circle',
-        'bg' => 'bg-soft-danger',
-        'text' => 'text-danger'
-    ],
-    [
-        'id' => 4,
-        'type' => 'system',
-        'category' => 'system',
-        'title' => 'System Maintenance',
-        'child_name' => 'N/A',
-        'vaccine_name' => 'N/A',
-        'due_date' => 'N/A',
-        'message' => 'The system will be undergoing maintenance on Saturday from 12 AM to 2 AM. Services will be unavailable.',
-        'time' => '2 days ago',
-        'datetime' => '2023-10-23 10:00',
-        'status' => 'read',
-        'icon' => 'fa-info-circle',
-        'bg' => 'bg-soft-info',
-        'text' => 'text-info'
-    ],
-    [
-        'id' => 5,
-        'type' => 'vaccination',
-        'category' => 'vaccination',
-        'title' => 'Vaccination Completed',
-        'child_name' => 'Emma Watson',
-        'vaccine_name' => 'Hepatitis B',
-        'due_date' => '2023-10-22',
-        'message' => 'Vaccination record updated: Emma has successfully received the Hepatitis B vaccine.',
-        'time' => '3 days ago',
-        'datetime' => '2023-10-22 11:30',
-        'status' => 'read',
-        'icon' => 'fa-check-circle',
-        'bg' => 'bg-soft-success',
-        'text' => 'text-success'
-    ]
-];
+// Fetch Notifications from Database
+$notifications = [];
+$parent_id = $_SESSION['user_id'];
+$stmt = $conn->prepare("SELECT * FROM notifications WHERE user_type = 'parent' AND (recipient_id = ? OR recipient_id IS NULL) ORDER BY created_at DESC");
+$stmt->bind_param("i", $parent_id);
+$stmt->execute();
+$result = $stmt->get_result();
 
-// Generate more dummy items
-for ($i = 6; $i <= 10; $i++) {
-    $types = ['vaccination', 'appointment', 'system'];
-    $type = $types[array_rand($types)];
-    $status = ($i % 2 == 0) ? 'read' : 'unread';
+while ($row = $result->fetch_assoc()) {
+    // Map DB types to UI styles
+    $icon = 'fa-bell';
+    $bg = 'bg-soft-primary';
+    $text = 'text-primary';
     
-    $item = [
-        'id' => $i,
-        'type' => $type,
-        'time' => $i . ' days ago',
-        'datetime' => '2023-10-' . (25-$i) . ' 09:00',
-        'status' => $status
-    ];
-
-    if ($type == 'vaccination') {
-        $item['category'] = 'vaccination';
-        $item['title'] = 'Upcoming Vaccination Reminder';
-        $item['child_name'] = 'Ali Khan';
-        $item['vaccine_name'] = 'DTP Booster';
-        $item['due_date'] = '2023-11-15';
-        $item['message'] = 'Reminder: DTP Booster is due soon for Ali. Please check the schedule.';
-        $item['icon'] = 'fa-syringe';
-        $item['bg'] = 'bg-soft-warning';
-        $item['text'] = 'text-warning';
-    } elseif ($type == 'appointment') {
-        $item['category'] = 'appointments';
-        $item['title'] = 'Appointment Rescheduled';
-        $item['child_name'] = 'Sarah Connor';
-        $item['vaccine_name'] = 'General Checkup';
-        $item['due_date'] = '2023-11-01';
-        $item['message'] = 'Your appointment has been successfully rescheduled to Nov 1st.';
-        $item['icon'] = 'fa-calendar-alt';
-        $item['bg'] = 'bg-soft-primary';
-        $item['text'] = 'text-primary';
-    } else {
-        $item['category'] = 'system';
-        $item['title'] = 'New Health Guidelines';
-        $item['child_name'] = 'N/A';
-        $item['vaccine_name'] = 'N/A';
-        $item['due_date'] = 'N/A';
-        $item['message'] = 'Ministry of Health has released new guidelines for child nutrition.';
-        $item['icon'] = 'fa-file-medical-alt';
-        $item['bg'] = 'bg-light';
-        $item['text'] = 'text-secondary';
+    switch($row['type']) {
+        case 'appointment': $icon = 'fa-calendar-check'; $bg = 'bg-soft-success'; $text = 'text-success'; break;
+        case 'vaccination': $icon = 'fa-syringe'; $bg = 'bg-soft-warning'; $text = 'text-warning'; break;
+        case 'system': $icon = 'fa-info-circle'; $bg = 'bg-soft-info'; $text = 'text-info'; break;
+        case 'message': $icon = 'fa-envelope'; $bg = 'bg-soft-secondary'; $text = 'text-secondary'; break;
     }
-    $notifications[] = $item;
+
+    $notifications[] = [
+        'id' => $row['id'],
+        'category' => $row['type'], // appointment, vaccination, system
+        'title' => $row['title'],
+        'message' => $row['message'],
+        'time' => time_elapsed_string($row['created_at']),
+        'datetime' => date('M d, Y h:i A', strtotime($row['created_at'])),
+        'status' => $row['status'],
+        'icon' => $icon,
+        'bg' => $bg,
+        'text' => $text
+    ];
 }
 
 // Calculate Stats
 $total_notifs = count($notifications);
 $unread_notifs = count(array_filter($notifications, fn($n) => $n['status'] === 'unread'));
-$appointment_alerts = count(array_filter($notifications, fn($n) => $n['category'] === 'appointments'));
+$appointment_alerts = count(array_filter($notifications, fn($n) => $n['category'] === 'appointment'));
 $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] === 'system'));
 ?>
 
@@ -276,7 +211,7 @@ $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] ===
                     <button class="btn btn-sm btn-primary px-3 rounded-pill filter-btn active" data-filter="all">All</button>
                     <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="unread">Unread</button>
                     <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="vaccination">Vaccinations</button>
-                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="appointments">Appointments</button>
+                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="appointment">Appointments</button>
                     <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="system">System Messages</button>
                 </div>
             </div>
@@ -305,9 +240,6 @@ $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] ===
                                      data-title="<?= htmlspecialchars($note['title']) ?>"
                                      data-message="<?= htmlspecialchars($note['message']) ?>"
                                      data-time="<?= $note['time'] ?>"
-                                     data-child="<?= htmlspecialchars($note['child_name']) ?>"
-                                     data-vaccine="<?= htmlspecialchars($note['vaccine_name']) ?>"
-                                     data-due="<?= $note['due_date'] ?>"
                                      data-icon="<?= $note['icon'] ?>"
                                      data-bg="<?= $note['bg'] ?>"
                                      data-category="<?= $note['category'] ?>">
@@ -343,7 +275,7 @@ $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] ===
                 </div>
 
                 <!-- Empty State (Hidden by default) -->
-                <div id="emptyState" class="text-center py-5 d-none">
+                <div id="emptyState" class="text-center py-5 <?= empty($notifications) ? '' : 'd-none' ?>">
                     <div class="mb-3">
                         <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
                             <i class="far fa-bell-slash fa-3x text-muted"></i>
@@ -374,22 +306,6 @@ $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] ===
                     <div>
                         <h6 id="modalTitle" class="fw-bold mb-1 text-dark"></h6>
                         <small id="modalTime" class="text-muted"></small>
-                    </div>
-                </div>
-
-                <!-- Details Table -->
-                <div class="bg-light rounded-3 p-3 mb-3">
-                    <div class="row g-2 mb-2">
-                        <div class="col-4 text-muted small fw-bold">Child Name:</div>
-                        <div class="col-8 text-dark small" id="modalChild"></div>
-                    </div>
-                    <div class="row g-2 mb-2">
-                        <div class="col-4 text-muted small fw-bold">Vaccine:</div>
-                        <div class="col-8 text-dark small" id="modalVaccine"></div>
-                    </div>
-                    <div class="row g-2">
-                        <div class="col-4 text-muted small fw-bold">Due Date:</div>
-                        <div class="col-8 text-dark small" id="modalDue"></div>
                     </div>
                 </div>
 
@@ -459,6 +375,14 @@ $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] ===
         // Mark as Read Logic
         function markAsRead(item) {
             if (item.getAttribute('data-status') === 'unread') {
+                const id = item.getAttribute('data-id');
+                
+                // AJAX Call
+                const formData = new FormData();
+                formData.append('action', 'mark_read');
+                formData.append('id', id);
+                fetch('notifications.php', { method: 'POST', body: formData });
+
                 item.setAttribute('data-status', 'read');
                 item.classList.remove('unread');
                 item.classList.add('read');
@@ -485,6 +409,11 @@ $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] ===
 
         // Mark All as Read
         document.getElementById('markAllReadBtn').addEventListener('click', () => {
+            // AJAX Call
+            const formData = new FormData();
+            formData.append('action', 'mark_all_read');
+            fetch('notifications.php', { method: 'POST', body: formData });
+
             items.forEach(item => markAsRead(item));
         });
 
@@ -494,6 +423,14 @@ $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] ===
                 e.stopPropagation(); // Prevent modal opening
                 if(confirm('Are you sure you want to delete this notification?')) {
                     const item = this.closest('.notification-item');
+                    const id = item.getAttribute('data-id');
+
+                    // AJAX Call
+                    const formData = new FormData();
+                    formData.append('action', 'delete');
+                    formData.append('id', id);
+                    fetch('notifications.php', { method: 'POST', body: formData });
+
                     item.remove();
                     
                     // Update Total Counter
@@ -510,6 +447,11 @@ $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] ===
         // Clear All
         document.getElementById('clearAllBtn').addEventListener('click', () => {
             if(confirm('Are you sure you want to clear all notifications?')) {
+                // AJAX Call
+                const formData = new FormData();
+                formData.append('action', 'clear_all');
+                fetch('notifications.php', { method: 'POST', body: formData });
+
                 items.forEach(item => item.remove());
                 document.getElementById('statTotal').innerText = '0';
                 document.getElementById('statUnread').innerText = '0';
@@ -523,9 +465,6 @@ $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] ===
             const title = element.getAttribute('data-title');
             const message = element.getAttribute('data-message');
             const time = element.getAttribute('data-time');
-            const child = element.getAttribute('data-child');
-            const vaccine = element.getAttribute('data-vaccine');
-            const due = element.getAttribute('data-due');
             const icon = element.getAttribute('data-icon');
             const bg = element.getAttribute('data-bg');
             const category = element.getAttribute('data-category');
@@ -534,9 +473,6 @@ $system_alerts = count(array_filter($notifications, fn($n) => $n['category'] ===
             document.getElementById('modalTitle').innerText = title;
             document.getElementById('modalMessage').innerText = message;
             document.getElementById('modalTime').innerText = time;
-            document.getElementById('modalChild').innerText = child;
-            document.getElementById('modalVaccine').innerText = vaccine;
-            document.getElementById('modalDue').innerText = due;
 
             // Icon styling
             const modalIcon = document.getElementById('modalIcon');

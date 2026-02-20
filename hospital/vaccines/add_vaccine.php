@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 $alert_msg = '';
 $alert_type = '';
@@ -21,6 +22,13 @@ if(isset($_POST['add_btn'])) {
     $stmt = $conn->prepare("INSERT INTO vaccines (vaccine_name, target_age_group, total_dose, availability_status, description) VALUES (?, ?, ?, ?, ?)");
     $stmt->bind_param("ssiss", $name, $age_group, $doses, $status, $description);
     if($stmt->execute()) {
+        // Trigger Notification to Admin
+        $user_id = $_SESSION['user_id'];
+        $hospital_name = $_SESSION['name'];
+        $notif_title = "New Vaccine Added";
+        $notif_message = "Hospital '$hospital_name' added a new vaccine: " . htmlspecialchars($name) . ".";
+        send_notification($conn, 'admin', null, $user_id, 'vaccination', $notif_title, $notif_message);
+
         $alert_msg = "New vaccine added successfully.";
         $alert_type = "success";
     } else {

@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 // Check if vaccine ID is provided
 if (!isset($_GET['id'])) {
@@ -55,6 +56,14 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_btn'])) {
             $alert_msg = "The availability status for <strong>$vaccineName</strong> has been updated successfully.";
             $alert_type = "success";
             $currentStatus = $status;
+
+            // Trigger Notification to all Hospitals
+            $admin_id = $_SESSION['user_id'];
+            $admin_name = $_SESSION['name'];
+            $notif_title = "Vaccine Status Updated";
+            $notif_message = "Admin '$admin_name' has updated the status of vaccine '" . htmlspecialchars($vaccineName) . "' to '" . htmlspecialchars($status) . "'.";
+            send_notification($conn, 'hospital', null, $admin_id, 'vaccination', $notif_title, $notif_message);
+
         } else {
             $alert_msg = "Error updating status: " . $stmt_update->error;
             $alert_type = "danger";

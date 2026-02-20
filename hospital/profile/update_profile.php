@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 // Get hospital ID from session
 $id = $_SESSION['user_id'];
@@ -43,6 +44,11 @@ if(isset($_POST['update_btn'])) {
     $stmt_update = $conn->prepare("UPDATE hospitals SET hospital_name = ?, phone = ?, address = ? WHERE id = ?");
     $stmt_update->bind_param("sssi", $hospital_name, $phone, $address, $hospital_id);
     if($stmt_update->execute()) {
+        // Trigger Notification to Admin
+        $notif_title = "Hospital Profile Updated";
+        $notif_message = "Hospital '" . htmlspecialchars($hospital_name) . "' updated their profile details.";
+        send_notification($conn, 'admin', null, $id, 'system', $notif_title, $notif_message);
+
         $alert_msg = "Profile updated successfully.";
         $alert_type = "success";
         // Update local array to reflect changes immediately
@@ -81,6 +87,12 @@ if(isset($_POST['update_password_btn'])) {
             $update_password = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
             $update_password->bind_param("si", $new_password_hash, $id);
             if($update_password->execute()) {
+                // Trigger Notification to Admin
+                $hospital_name = $_SESSION['name'];
+                $notif_title = "Hospital Password Changed";
+                $notif_message = "Hospital '$hospital_name' has changed their password.";
+                send_notification($conn, 'admin', null, $id, 'system', $notif_title, $notif_message);
+
                 $alert_msg = "Password updated successfully.";
                 $alert_type = "success";
             } else {

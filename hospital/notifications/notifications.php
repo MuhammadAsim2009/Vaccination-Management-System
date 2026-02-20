@@ -1,123 +1,82 @@
 <?php
-/**
- * Notifications Page
- * 
- * Displays system notifications for the hospital user including appointments,
- * stock alerts, and system messages.
- */
-
+include '../../config/db.php';
+include '../../config/functions.php';
 include '../includes/auth_check.php';
+
+// --- Handle AJAX Actions ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    header('Content-Type: application/json');
+    $action = $_POST['action'];
+    $id = isset($_POST['id']) ? intval($_POST['id']) : 0;
+    $user_type = 'hospital';
+    $user_id = $_SESSION['user_id'];
+
+    if ($action === 'mark_read' && $id) {
+        $stmt = $conn->prepare("UPDATE notifications SET status = 'read' WHERE id = ? AND user_type = ? AND (recipient_id = ? OR recipient_id IS NULL)");
+        $stmt->bind_param("isi", $id, $user_type, $user_id);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+    
+    if ($action === 'delete' && $id) {
+        $stmt = $conn->prepare("DELETE FROM notifications WHERE id = ? AND user_type = ? AND (recipient_id = ? OR recipient_id IS NULL)");
+        $stmt->bind_param("isi", $id, $user_type, $user_id);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+
+    if ($action === 'mark_all_read') {
+        $stmt = $conn->prepare("UPDATE notifications SET status = 'read' WHERE user_type = ? AND (recipient_id = ? OR recipient_id IS NULL) AND status = 'unread'");
+        $stmt->bind_param("si", $user_type, $user_id);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+
+    if ($action === 'clear_all') {
+        $stmt = $conn->prepare("DELETE FROM notifications WHERE user_type = ? AND (recipient_id = ? OR recipient_id IS NULL)");
+        $stmt->bind_param("si", $user_type, $user_id);
+        echo json_encode(['success' => $stmt->execute()]);
+        exit;
+    }
+    exit;
+}
+
 include '../includes/header.php';
 include '../includes/sidebar.php';
 
-// --------------------------------------------------------------------------
-// Dummy Data Generation
-// --------------------------------------------------------------------------
-$notifications = [
-    [
-        'id' => 1,
-        'type' => 'appointment',
-        'category' => 'appointments',
-        'title' => 'New Appointment Request',
-        'message' => 'Sarah Connor requested a vaccination appointment for Child: John.',
-        'time' => '10 mins ago',
-        'datetime' => '2023-10-25 09:30',
-        'status' => 'unread',
-        'icon' => 'fa-calendar-check',
-        'bg' => 'bg-soft-primary',
-        'text' => 'text-primary'
-    ],
-    [
-        'id' => 2,
-        'type' => 'alert',
-        'category' => 'alerts',
-        'title' => 'Low Stock Warning',
-        'message' => 'Polio Vaccine stock is running low (less than 50 units). Please restock immediately.',
-        'time' => '1 hour ago',
-        'datetime' => '2023-10-25 08:45',
-        'status' => 'unread',
-        'icon' => 'fa-exclamation-triangle',
-        'bg' => 'bg-soft-warning',
-        'text' => 'text-warning'
-    ],
-    [
-        'id' => 3,
-        'type' => 'vaccine',
-        'category' => 'vaccinations',
-        'title' => 'Vaccination Completed',
-        'message' => 'System verified vaccination record for Patient #4592 (Emma Watson).',
-        'time' => '2 hours ago',
-        'datetime' => '2023-10-25 07:15',
-        'status' => 'read',
-        'icon' => 'fa-syringe',
-        'bg' => 'bg-soft-success',
-        'text' => 'text-success'
-    ],
-    [
-        'id' => 4,
-        'type' => 'system',
-        'category' => 'system',
-        'title' => 'System Maintenance',
-        'message' => 'Scheduled maintenance on Saturday, 12:00 AM - 02:00 AM. The system will be offline.',
-        'time' => '1 day ago',
-        'datetime' => '2023-10-24 14:00',
-        'status' => 'read',
-        'icon' => 'fa-server',
-        'bg' => 'bg-soft-info',
-        'text' => 'text-info'
-    ],
-    [
-        'id' => 5,
-        'type' => 'alert',
-        'category' => 'alerts',
-        'title' => 'Temperature Alert',
-        'message' => 'Freezer B temperature deviation detected. Check sensor logs.',
-        'time' => '2 days ago',
-        'datetime' => '2023-10-23 11:20',
-        'status' => 'read',
-        'icon' => 'fa-temperature-high',
-        'bg' => 'bg-soft-danger',
-        'text' => 'text-danger'
-    ]
-];
+// Fetch Notifications from Database
+$notifications = [];
+$user_id = $_SESSION['user_id'];
+$stmt = $conn->prepare("SELECT * FROM notifications WHERE user_type = 'hospital' AND (recipient_id = ? OR recipient_id IS NULL) ORDER BY created_at DESC");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
 
-// Generate additional dummy items to reach ~12 items
-for ($i = 6; $i <= 12; $i++) {
-    $types = ['appointment', 'vaccine', 'system'];
-    $type = $types[array_rand($types)];
-    $status = ($i % 3 == 0) ? 'unread' : 'read';
+while ($row = $result->fetch_assoc()) {
+    // Map DB types to UI styles
+    $icon = 'fa-bell';
+    $bg = 'bg-soft-primary';
+    $text = 'text-primary';
     
-    $item = [
-        'id' => $i,
-        'type' => $type,
-        'time' => $i . ' days ago',
-        'datetime' => '2023-10-' . (25-$i) . ' 10:00',
-        'status' => $status
-    ];
-
-    if ($type == 'appointment') {
-        $item['category'] = 'appointments';
-        $item['title'] = 'Appointment Update';
-        $item['message'] = 'Patient updated their schedule preference for upcoming visit.';
-        $item['icon'] = 'fa-calendar-alt';
-        $item['bg'] = 'bg-soft-primary';
-        $item['text'] = 'text-primary';
-    } elseif ($type == 'vaccine') {
-        $item['category'] = 'vaccinations';
-        $item['title'] = 'Batch Expiry Warning';
-        $item['message'] = 'Vaccine Batch #3922 expires in 30 days. Prioritize usage.';
-        $item['icon'] = 'fa-vials';
-        $item['bg'] = 'bg-soft-success';
-        $item['text'] = 'text-success';
-    } else {
-        $item['category'] = 'system';
-        $item['title'] = 'Policy Update';
-        $item['message'] = 'New vaccination guidelines have been published by the admin.';
-        $item['icon'] = 'fa-file-alt';
-        $item['bg'] = 'bg-light';
-        $item['text'] = 'text-secondary';
+    switch($row['type']) {
+        case 'appointment': $icon = 'fa-calendar-check'; $bg = 'bg-soft-primary'; $text = 'text-primary'; break;
+        case 'vaccination': $icon = 'fa-syringe'; $bg = 'bg-soft-success'; $text = 'text-success'; break;
+        case 'system': $icon = 'fa-server'; $bg = 'bg-soft-info'; $text = 'text-info'; break;
+        case 'message': $icon = 'fa-envelope'; $bg = 'bg-soft-warning'; $text = 'text-warning'; break;
     }
-    $notifications[] = $item;
+
+    $notifications[] = [
+        'id' => $row['id'],
+        'category' => $row['type'], // appointment, vaccination, system, message
+        'title' => $row['title'],
+        'message' => $row['message'],
+        'time' => time_elapsed_string($row['created_at']),
+        'datetime' => date('M d, Y h:i A', strtotime($row['created_at'])),
+        'status' => $row['status'],
+        'icon' => $icon,
+        'bg' => $bg,
+        'text' => $text
+    ];
 }
 ?>
 
@@ -153,9 +112,9 @@ for ($i = 6; $i <= 12; $i++) {
                 <div class="d-flex flex-wrap gap-2" id="notificationFilters">
                     <button class="btn btn-sm btn-primary px-3 rounded-pill filter-btn active" data-filter="all">All</button>
                     <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="unread">Unread</button>
-                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="appointments">Appointments</button>
-                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="vaccinations">Vaccinations</button>
-                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="alerts">Alerts</button>
+                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="appointment">Appointments</button>
+                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="vaccination">Vaccinations</button>
+                    <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="message">Messages</button>
                     <button class="btn btn-sm btn-light text-dark px-3 rounded-pill filter-btn" data-filter="system">System</button>
                 </div>
             </div>
@@ -210,7 +169,7 @@ for ($i = 6; $i <= 12; $i++) {
                 </div>
 
                 <!-- Empty State (Hidden by default) -->
-                <div id="emptyState" class="text-center py-5 d-none">
+                <div id="emptyState" class="text-center py-5 <?= empty($notifications) ? '' : 'd-none' ?>">
                     <div class="mb-3">
                         <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
                             <i class="far fa-bell-slash fa-3x text-muted"></i>
@@ -304,6 +263,14 @@ for ($i = 6; $i <= 12; $i++) {
 
             // Mark as Read Functionality
             function markAsRead(item) {
+                const id = item.getAttribute('data-id');
+                
+                // AJAX Call
+                const formData = new FormData();
+                formData.append('action', 'mark_read');
+                formData.append('id', id);
+                fetch('notifications.php', { method: 'POST', body: formData });
+
                 item.setAttribute('data-status', 'read');
                 item.classList.remove('unread');
                 item.classList.add('read');
@@ -326,6 +293,14 @@ for ($i = 6; $i <= 12; $i++) {
                     e.stopPropagation();
                     if(confirm('Delete this notification?')) {
                         const item = this.closest('.notification-item');
+                        const id = item.getAttribute('data-id');
+
+                        // AJAX Call
+                        const formData = new FormData();
+                        formData.append('action', 'delete');
+                        formData.append('id', id);
+                        fetch('notifications.php', { method: 'POST', body: formData });
+
                         item.remove();
                         // Check if list is empty after delete
                         const visibleItems = document.querySelectorAll('.notification-item:not(.d-none)');
@@ -337,6 +312,11 @@ for ($i = 6; $i <= 12; $i++) {
             // Clear All Functionality
             document.getElementById('clearAllBtn').addEventListener('click', () => {
                 if(confirm('Are you sure you want to clear all notifications?')) {
+                    // AJAX Call
+                    const formData = new FormData();
+                    formData.append('action', 'clear_all');
+                    fetch('notifications.php', { method: 'POST', body: formData });
+
                     items.forEach(item => item.remove());
                     emptyState.classList.remove('d-none');
                 }

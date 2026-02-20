@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 $alert_msg = '';
 $alert_type = '';
@@ -59,6 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt_hospital->bind_param("isssss", $user_id, $hospital_name, $reg_no, $phone, $address, $status);
             $stmt_hospital->execute();
             $stmt_hospital->close();
+
+            // Trigger Notification (Log Admin Action)
+            $admin_id = $_SESSION['user_id'];
+            $admin_name = $_SESSION['name'];
+            $notif_title = "New Hospital Added";
+            $notif_message = "Admin '$admin_name' manually added a new hospital: '" . htmlspecialchars($hospital_name) . "'.";
+            send_notification($conn, 'admin', null, $admin_id, 'system', $notif_title, $notif_message);
 
             $conn->commit();
             $alert_msg = "Hospital registered successfully! Redirecting to list...";

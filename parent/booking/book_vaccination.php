@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 // Check if hospital_id is provided in the URL
 if (!isset($_GET['hospital_id'])) {
@@ -111,6 +112,24 @@ if(isset($_POST['confirm_btn'])) {
     $stmt_insert->bind_param("iiiiis", $parent_id, $hospital_id, $child_id, $vaccine_id, $dose_number, $appointment_datetime);
     if ($stmt_insert->execute()) {
         $booking_success = true;
+
+        // Trigger Notification for Admin
+        $appointment_id = $conn->insert_id;
+
+        // Get names for a descriptive message
+        $child_name = '';
+        foreach ($children_list as $child) {
+            if ($child['id'] == $child_id) {
+                $child_name = $child['name'];
+                break;
+            }
+        }
+        $hospital_name = $hospital_info['name'];
+        $parent_name = $_SESSION['name']; // Fetched during login
+
+        $notif_title = "New Appointment Request";
+        $notif_message = "Parent '" . htmlspecialchars($parent_name) . "' requested an appointment (#$appointment_id) for child '" . htmlspecialchars($child_name) . "' at " . htmlspecialchars($hospital_name) . ".";
+        send_notification($conn, 'admin', null, $user_id, 'appointment', $notif_title, $notif_message);
     } else {
         echo "<div class='alert alert-danger'>Error booking appointment: " . $conn->error . "</div>";
     }

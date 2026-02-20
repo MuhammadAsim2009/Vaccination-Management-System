@@ -4,6 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
+include '../../config/functions.php';
 
 // Handle Approval/Rejection Actions
 $action_msg = '';
@@ -25,16 +26,20 @@ if (isset($_POST['approve_request_btn'])) {
         // Check if the update was successful
         if ($stmt_approved->affected_rows > 0) {
             // Fetch appointment details to create a schedule entry
-            $stmt_fetch = $conn->prepare("SELECT child_id, vaccine_id, hospital_id, appointment_date, dose_number FROM appointments WHERE id = ?");
+            $stmt_fetch = $conn->prepare("SELECT a.child_id, a.vaccine_id, a.hospital_id, a.appointment_date, a.dose_number, a.parent_id, h.user_id AS hospital_user_id, c.name AS child_name FROM appointments a JOIN hospitals h ON a.hospital_id = h.id JOIN children c ON a.child_id = c.id WHERE a.id = ?");
             $stmt_fetch->bind_param("i", $request_id);
             $stmt_fetch->execute();
             $appointment = $stmt_fetch->get_result()->fetch_assoc();
             $stmt_fetch->close();
 
             if ($appointment) {
+                // Extract details for scheduling and notifications
+                $child_name = $appointment['child_name'];
                 $child_id = $appointment['child_id'];
                 $vaccine_id = $appointment['vaccine_id'];
                 $hospital_id = $appointment['hospital_id'];
+                $parent_id = $appointment['parent_id'];
+                $hospital_user_id = $appointment['hospital_user_id'];
                 $dose_number = $appointment['dose_number'];
                 $scheduled_date = date('Y-m-d H:i:s', strtotime($appointment['appointment_date']));
 
@@ -43,6 +48,16 @@ if (isset($_POST['approve_request_btn'])) {
                 $stmt_schedule->bind_param("iiisi", $child_id, $vaccine_id, $hospital_id, $scheduled_date, $dose_number);
                 $stmt_schedule->execute();
                 $stmt_schedule->close();
+
+                // --- Trigger Notifications ---
+                // 1. Log Admin Action (for admin panel)
+                $admin_id = $_SESSION['user_id'];
+                $admin_name = $_SESSION['name'];
+                send_notification($conn, 'admin', null, $admin_id, 'appointment', 'Appointment Approved', "Admin '$admin_name' approved appointment request #$request_id for child '$child_name'.");
+                // 2. Notify Parent
+                send_notification($conn, 'parent', $parent_id, $admin_id, 'appointment', 'Appointment Approved', "Your appointment request #$request_id for child '$child_name' has been approved and scheduled.");
+                // 3. Notify Hospital
+                send_notification($conn, 'hospital', $hospital_user_id, $admin_id, 'appointment', 'New Appointment Scheduled', "A new appointment (Request #$request_id) has been scheduled at your facility for child '$child_name'.");
 
                 // Commit the transaction since all queries were successful
                 $conn->commit();
@@ -71,17 +86,48 @@ if (isset($_POST['approve_request_btn'])) {
 
 // Handle Rejection
 if (isset($_POST['reject_request_btn'])) {
-    $request_id = $_POST['request_id'];    
-    if ($stmt_rejected = $conn->prepare("UPDATE appointments SET status = 'rejected' WHERE id = ?")) {
-        $stmt_rejected->bind_param("i", $request_id);
+    $request_id = $_POST['request_id'];
+    $rejection_reason = trim($_POST['rejection_reason'] ?? 'No reason provided.');
 
-        if ($stmt_rejected->execute()) {
-            $action_msg = "Request #REQ-" . htmlspecialchars($request_id) . " rejected successfully.";
-            $action_type = "success";
-        } else {
-            $action_msg = "Error rejecting request: " . $stmt_rejected->error;
-            $action_type = "danger";
+    // Fetch parent_id before updating to notify the correct parent
+    $stmt_fetch_parent = $conn->prepare("SELECT a.parent_id, c.name AS child_name FROM appointments a JOIN children c ON a.child_id = c.id WHERE a.id = ?");
+    $stmt_fetch_parent->bind_param("i", $request_id);
+    $stmt_fetch_parent->execute();
+    $appointment_details = $stmt_fetch_parent->get_result()->fetch_assoc();
+    $stmt_fetch_parent->close();
+
+    if ($appointment_details) {
+        $parent_id = $appointment_details['parent_id'];
+        $child_name = $appointment_details['child_name'];
+
+        if ($stmt_rejected = $conn->prepare("UPDATE appointments SET status = 'rejected' WHERE id = ?")) {
+            $stmt_rejected->bind_param("i", $request_id);
+
+            if ($stmt_rejected->execute()) {
+                // --- Trigger Notifications ---
+                // 1. Log Admin Action
+                $admin_id = $_SESSION['user_id'];
+                $admin_name = $_SESSION['name'];
+                send_notification($conn, 'admin', null, $admin_id, 'appointment', 'Appointment Rejected', "Admin '$admin_name' rejected appointment request #$request_id for child '$child_name'.");
+
+                // 2. Notify Parent
+                $notif_message = "Your appointment request #$request_id for child '$child_name' has been rejected.";
+                if (!empty($rejection_reason) && $rejection_reason !== 'No reason provided.') {
+                    $notif_message .= " Reason: " . htmlspecialchars($rejection_reason);
+                }
+                send_notification($conn, 'parent', $parent_id, $admin_id, 'appointment', 'Appointment Rejected', $notif_message);
+
+                $action_msg = "Request #REQ-" . htmlspecialchars($request_id) . " rejected successfully.";
+                $action_type = "success";
+            } else {
+                $action_msg = "Error rejecting request: " . $stmt_rejected->error;
+                $action_type = "danger";
+            }
+            $stmt_rejected->close();
         }
+    } else {
+        $action_msg = "Error: Could not find appointment to reject.";
+        $action_type = "danger";
     }
 }
 

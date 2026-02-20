@@ -1,5 +1,6 @@
 <?php
 include '../config/db.php';
+include '../config/functions.php';
 
 if(isset($_POST['register_btn'])) {
     $name = $_POST['name'];
@@ -47,16 +48,8 @@ if(isset($_POST['register_btn'])) {
         $stmt_parent->execute();
         $stmt_parent->close();
 
-        // Send notification to admin
-        $notification_type = 'new_registration';
-        $notification_title = 'New Parent Registration';
-        $notification_message = "A new parent, " . htmlspecialchars($name) . ", has registered.";
-        $notification_user_type = 'admin';
-
-        $stmt_notification = $conn->prepare("INSERT INTO notifications (user_type, user_id, type, title, message) VALUES (?, ?, ?, ?, ?)");
-        $stmt_notification->bind_param("sisss", $notification_user_type, $user_id, $notification_type, $notification_title, $notification_message);
-        $stmt_notification->execute();
-        $stmt_notification->close();
+        // Send notification to admin using reusable function
+        send_notification($conn, 'admin', null, $user_id, 'system', 'New Parent Registration', "A new parent, " . htmlspecialchars($name) . ", has registered.");
 
         // Commit transaction
         $conn->commit();
