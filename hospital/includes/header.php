@@ -1,7 +1,41 @@
 <?php
+include_once __DIR__ . '/../../config/db.php';
+include_once __DIR__ . '/../../config/functions.php';
+
 // Retrieve current page filename to set the page title dynamically
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 $pageTitle = ucwords(str_replace("_", " ", $currentPage));
+
+// Fetch Notifications for Hospital
+$hospital_id = $_SESSION['user_id'] ?? 0;
+$notifs = [];
+$unread_count = 0;
+
+if (isset($conn) && $hospital_id) {
+    // Count unread notifications
+    $stmt_unread = $conn->prepare("SELECT COUNT(*) as count FROM notifications WHERE user_type = 'hospital' AND recipient_id = ? AND status = 'unread'");
+    if ($stmt_unread) {
+        $stmt_unread->bind_param("i", $hospital_id);
+        $stmt_unread->execute();
+        $res_unread = $stmt_unread->get_result();
+        if ($row = $res_unread->fetch_assoc()) {
+            $unread_count = $row['count'];
+        }
+        $stmt_unread->close();
+    }
+
+    // Fetch latest 5 notifications
+    $stmt_notif = $conn->prepare("SELECT * FROM notifications WHERE user_type = 'hospital' AND recipient_id = ? ORDER BY created_at DESC LIMIT 3");
+    if ($stmt_notif) {
+        $stmt_notif->bind_param("i", $hospital_id);
+        $stmt_notif->execute();
+        $result_notif = $stmt_notif->get_result();
+        while ($row = $result_notif->fetch_assoc()) {
+            $notifs[] = $row;
+        }
+        $stmt_notif->close();
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -58,51 +92,73 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
             <ul class="navbar-nav ms-auto align-items-center">
                 
                 <!-- Notification Bell -->
-                <li class="nav-item dropdown me-3">
+                <li class="nav-item dropdown position-relative">
                     <a class="nav-link position-relative" href="#" id="notificationDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="fas fa-bell fa-lg text-secondary"></i>
-                        <span class="position-absolute translate-middle badge rounded-pill bg-danger notification-badge" style="font-size: 0.65rem;">
-                            3
-                            <span class="visually-hidden">unread messages</span>
+                        <i class="fas fa-bell fs-5 text-secondary"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.65rem;">
+                            <?= $unread_count ?>
+                            <span class="visually-hidden">unread notifications</span>
                         </span>
                     </a>
                     
-                    <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="notificationDropdown" style="width: 300px;">
-                        <li><h6 class="dropdown-header">Notifications</h6></li>
-                        <li><a class="dropdown-item d-flex align-items-start py-2" href="#">
-                            <div class="me-2"><i class="fas fa-calendar-check text-success"></i></div>
-                            <div>
-                                <small class="fw-bold d-block">Appointment Confirmed</small>
-                                <small class="text-muted">John Doe - 10:00 AM</small>
-                            </div>
-                        </a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item d-flex align-items-start py-2" href="#">
-                            <div class="me-2"><i class="fas fa-exclamation-circle text-warning"></i></div>
-                            <div>
-                                <small class="fw-bold d-block">Stock Alert</small>
-                                <small class="text-muted">Polio vaccine running low</small>
-                            </div>
-                        </a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-center small text-primary fw-bold" href="/vaccination_management_system/hospital/notifications/notifications.php">View all notifications</a></li>
+                    <!-- Notification Dropdown -->
+                    <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-3 mt-2" style="min-width: 320px;" aria-labelledby="notificationDropdown">
+                        <li class="px-3 py-2 border-bottom">
+                            <h6 class="mb-0 fw-bold text-dark">Notifications</h6>
+                        </li>
+                        
+                        <!-- Notification Items -->
+                        <?php if (count($notifs) > 0): ?>
+                            <?php foreach ($notifs as $notif): ?>
+                                <?php
+                                    // Determine icon and color based on type
+                                    $icon = 'fa-info-circle';
+                                    $colorClass = 'text-primary';
+                                    $bgClass = 'bg-primary';
+                                    
+                                    if ($notif['type'] == 'appointment') {
+                                        $icon = 'fa-calendar-check';
+                                        $colorClass = 'text-success';
+                                        $bgClass = 'bg-success';
+                                    } elseif ($notif['type'] == 'inventory') {
+                                        $icon = 'fa-exclamation-circle';
+                                        $colorClass = 'text-warning';
+                                        $bgClass = 'bg-warning';
+                                    }
+                                ?>
+                                <li>
+                                    <a class="dropdown-item py-3 border-bottom" href="#">
+                                        <div class="d-flex align-items-start">
+                                            <div class="<?= $bgClass ?> bg-opacity-10 rounded-circle p-2 me-3">
+                                                <i class="fas <?= $icon ?> <?= $colorClass ?>"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <p class="mb-1 small fw-semibold"><?= htmlspecialchars($notif['title']) ?></p>
+                                                <p class="mb-0 text-muted" style="font-size: 0.8rem; white-space: normal;"><?= htmlspecialchars($notif['message']) ?></p>
+                                                <small class="text-muted"><?= time_elapsed_string($notif['created_at']) ?></small>
+                                            </div>
+                                        </div>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <li class="text-center py-4"><p class="text-muted small mb-0">No new notifications</p></li>
+                        <?php endif; ?>
+                        
+                        <li class="text-center py-2 border-top">
+                            <a href="/vaccination_management_system/hospital/notifications/notifications.php" class="text-decoration-none small fw-semibold text-primary">View All Notifications</a>
+                        </li>
                     </ul>
                 </li>
 
-                <!-- Hospital Profile Dropdown -->
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="profileDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <!-- Hospital Profile Link -->
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center" href="/vaccination_management_system/hospital/profile/update_profile.php">
                         <img src="https://ui-avatars.com/api/?name=<?= $_SESSION['name'] ?>&background=0D6EFD&color=fff" alt="Profile" class="rounded-circle me-2" width="40" height="40">
                         <div class="d-flex flex-column text-end d-none d-md-block">
                             <span class="fw-bold small text-dark"><?= $_SESSION['name'] ?></span>
                         </div>
                     </a>
-                    <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="profileDropdown">
-                        <li><a class="dropdown-item" href="/vaccination_management_system/hospital/profile/update_profile.php"><i class="fas fa-user me-2 text-muted"></i> Profile</a></li>
-                        <li><a class="dropdown-item" href="settings.php"><i class="fas fa-cog me-2 text-muted"></i> Settings</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-danger" href="/vaccination_management_system/auth/logout.php"><i class="fas fa-sign-out-alt me-2"></i> Logout</a></li>
-                    </ul>
                 </li>
 
             </ul>

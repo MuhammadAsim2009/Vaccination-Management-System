@@ -1,7 +1,41 @@
 <?php
+include_once __DIR__ . '/../../config/db.php';
+include_once __DIR__ . '/../../config/functions.php';
+
 // Current Page logic for Title
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 $pageTitle = ucwords(str_replace("_", " ", $currentPage));
+
+// Fetch Notifications
+$admin_id = $_SESSION['user_id'] ?? 0;
+$notifs = [];
+$unread_count = 0;
+
+if (isset($conn) && $admin_id) {
+    // Count unread
+    $stmt_unread = $conn->prepare("SELECT COUNT(*) as count FROM notifications WHERE user_type = 'admin' AND recipient_id = ? AND status = 'unread'");
+    if ($stmt_unread) {
+        $stmt_unread->bind_param("i", $admin_id);
+        $stmt_unread->execute();
+        $res_unread = $stmt_unread->get_result();
+        if ($row = $res_unread->fetch_assoc()) {
+            $unread_count = $row['count'];
+        }
+        $stmt_unread->close();
+    }
+
+    // Fetch latest 5 notifications
+    $stmt_notif = $conn->prepare("SELECT * FROM notifications WHERE user_type = 'admin' AND recipient_id = ? ORDER BY created_at DESC LIMIT 3");
+    if ($stmt_notif) {
+        $stmt_notif->bind_param("i", $admin_id);
+        $stmt_notif->execute();
+        $result_notif = $stmt_notif->get_result();
+        while ($row = $result_notif->fetch_assoc()) {
+            $notifs[] = $row;
+        }
+        $stmt_notif->close();
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -72,7 +106,7 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                     <button class="btn-link text-dark p-2 position-relative border-0 bg-transparent" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Notifications">
                         <i class="fas fa-bell fs-5"></i>
                         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.65rem;">
-                            3
+                            <?= $unread_count ?>
                             <span class="visually-hidden">unread notifications</span>
                         </span>
                     </button>
@@ -80,15 +114,34 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="min-width: 300px; max-height: 400px; overflow-y: auto;">
                         <li><h6 class="dropdown-header">Notifications</h6></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <a class="dropdown-item d-flex align-items-start py-2" href="#">
-                                <i class="fas fa-circle text-primary me-2 mt-1" style="font-size: 0.5rem;"></i>
-                                <div class="flex-grow-1">
-                                    <div class="fw-semibold small">New appointment request</div>
-                                    <div class="text-muted small">2 minutes ago</div>
-                                </div>
-                            </a>
-                        </li>
+                        
+                        <?php if (count($notifs) > 0): ?>
+                            <?php foreach ($notifs as $notif): ?>
+                                <?php
+                                    $icon = 'fa-info-circle';
+                                    $textClass = 'text-primary';
+                                    if ($notif['type'] == 'alert') {
+                                        $icon = 'fa-exclamation-circle';
+                                        $textClass = 'text-danger';
+                                    } elseif ($notif['type'] == 'success') {
+                                        $icon = 'fa-check-circle';
+                                        $textClass = 'text-success';
+                                    }
+                                ?>
+                                <li>
+                                    <a class="dropdown-item d-flex align-items-start py-2" href="#">
+                                        <i class="fas <?= $icon ?> <?= $textClass ?> me-2 mt-1" style="font-size: 0.8rem;"></i>
+                                        <div class="flex-grow-1">
+                                            <div class="fw-semibold small"><?= htmlspecialchars($notif['title']) ?></div>
+                                            <div class="text-muted small"><?= time_elapsed_string($notif['created_at']) ?></div>
+                                        </div>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <li><div class="dropdown-item text-center small text-muted">No notifications</div></li>
+                        <?php endif; ?>
+
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <a class="dropdown-item text-center text-primary small fw-semibold" href="/vaccination_management_system/admin/notifications/notifications.php">
@@ -98,47 +151,19 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                     </ul>
                 </div>
 
-                <!-- Admin Profile Dropdown -->
-                <div class="dropdown">
-                    <button class="btn btn-link text-dark text-decoration-none d-flex align-items-center gap-2 p-0" 
-                            type="button" 
-                            id="adminProfileDropdown" 
-                            data-bs-toggle="dropdown" 
-                            aria-expanded="false">
-                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" 
-                             style="width: 38px; height: 38px; font-size: 0.9rem; font-weight: 600;">
-                            <?php 
-                                $adminName = isset($_SESSION['name']) ? $_SESSION['name'] : 'Admin';
-                                echo strtoupper(substr($adminName, 0, 1));
-                            ?>
-                        </div>
-                        <span class="d-none d-md-inline fw-medium">
-                            <?php echo htmlspecialchars($adminName); ?>
-                        </span>
-                        <i class="fas fa-chevron-down small d-none d-md-inline"></i>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="adminProfileDropdown">
-                        <li>
-                            <a class="dropdown-item py-2" href="/vaccination_management_system/admin/profile/profile.php">
-                                <i class="fas fa-user me-2 text-muted"></i>
-                                Profile
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item py-2" href="#">
-                                <i class="fas fa-cog me-2 text-muted"></i>
-                                Settings
-                            </a>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <a class="dropdown-item py-2 text-danger" href="/vaccination_management_system/auth/logout.php">
-                                <i class="fas fa-sign-out-alt me-2"></i>
-                                Logout
-                            </a>
-                        </li>
-                    </ul>
-                </div>
+                <!-- Admin Profile Link -->
+                <a href="/vaccination_management_system/admin/profile/profile.php" class="text-decoration-none d-flex align-items-center gap-2 text-dark">
+                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" 
+                         style="width: 38px; height: 38px; font-size: 0.9rem; font-weight: 600;">
+                        <?php 
+                            $adminName = isset($_SESSION['name']) ? $_SESSION['name'] : 'Admin';
+                            echo strtoupper(substr($adminName, 0, 1));
+                        ?>
+                    </div>
+                    <span class="d-none d-md-inline fw-medium">
+                        <?php echo htmlspecialchars($adminName); ?>
+                    </span>
+                </a>
 
             </div>
         </div>

@@ -112,12 +112,10 @@ if ($hospital_id) {
 // 5. Notifications (Recent Requests)
 $notifications = [];
 if ($hospital_id) {
-    // Fetch pending appointment requests
-    $sql = "SELECT a.created_at, c.name as child_name, 'request' as type 
-            FROM appointments a 
-            JOIN children c ON a.child_id = c.id 
-            WHERE a.hospital_id = ? AND a.status = 'approved' 
-            ORDER BY a.created_at DESC LIMIT 5";
+    // Fetch from notifications table
+    $sql = "SELECT * FROM notifications 
+            WHERE user_type = 'hospital' AND recipient_id = ? 
+            ORDER BY created_at DESC LIMIT 5";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $hospital_id);
     $stmt->execute();
@@ -328,12 +326,12 @@ if ($hospital_id) {
                         <div class="list-group list-group-flush">
                             <?php if ($notifications && $notifications->num_rows > 0): ?>
                             <?php while ($notif = $notifications->fetch_assoc()): ?>
-                            <a href="#" class="list-group-item list-group-item-action py-3 border-bottom">
+                            <a href="notifications/notifications.php" class="list-group-item list-group-item-action py-3 border-bottom">
                                 <div class="d-flex w-100 justify-content-between mb-1">
-                                    <h6 class="mb-1 fw-bold text-dark">New Appointment Request</h6>
-                                    <small class="text-muted"><?= date('M d', strtotime($notif['created_at'])) ?></small>
+                                    <h6 class="mb-1 fw-bold text-dark"><?= htmlspecialchars($notif['title']) ?></h6>
+                                    <small class="text-muted"><?= time_elapsed_string($notif['created_at']) ?></small>
                                 </div>
-                                <p class="mb-1 small text-secondary">New appointment request received for Child: <strong><?= htmlspecialchars($notif['child_name']) ?></strong>.</p>
+                                <p class="mb-1 small text-secondary text-truncate"><?= htmlspecialchars($notif['message']) ?></p>
                             </a>
                             <?php endwhile; ?>
                             <?php else: ?>

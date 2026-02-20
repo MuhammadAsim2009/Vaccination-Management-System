@@ -4,7 +4,7 @@ include '../../config/db.php';
 include '../includes/auth_check.php';
 include '../includes/header.php';
 include '../includes/sidebar.php';
-include '../../config/functions.php';
+include_once '../../config/functions.php';
 
 // Get hospital ID from session
 $id = $_SESSION['user_id'];

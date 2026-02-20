@@ -2,6 +2,37 @@
 // Current Page logic for Title
 $currentPage = basename($_SERVER['PHP_SELF'], ".php");
 $pageTitle = ucwords(str_replace("_", " ", $currentPage));
+
+// Fetch Notifications
+$parent_id = $_SESSION['user_id'] ?? 0;
+$notifs = [];
+$unread_count = 0;
+
+if (isset($conn) && $parent_id) {
+    // Count unread
+    $stmt_unread = $conn->prepare("SELECT COUNT(*) as count FROM notifications WHERE user_type = 'parent' AND recipient_id = ? AND status = 'unread'");
+    if ($stmt_unread) {
+        $stmt_unread->bind_param("i", $parent_id);
+        $stmt_unread->execute();
+        $res_unread = $stmt_unread->get_result();
+        if ($row = $res_unread->fetch_assoc()) {
+            $unread_count = $row['count'];
+        }
+        $stmt_unread->close();
+    }
+
+    // Fetch latest 5 notifications
+    $stmt_notif = $conn->prepare("SELECT * FROM notifications WHERE user_type = 'parent' AND recipient_id = ? ORDER BY created_at DESC LIMIT 3");
+    if ($stmt_notif) {
+        $stmt_notif->bind_param("i", $parent_id);
+        $stmt_notif->execute();
+        $result_notif = $stmt_notif->get_result();
+        while ($row = $result_notif->fetch_assoc()) {
+            $notifs[] = $row;
+        }
+        $stmt_notif->close();
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -59,7 +90,7 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                     <a class="nav-link position-relative" href="#" id="notificationDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="fas fa-bell fs-5 text-secondary"></i>
                         <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.65rem;">
-                            3
+                            <?= $unread_count ?>
                             <span class="visually-hidden">unread notifications</span>
                         </span>
                     </a>
@@ -71,50 +102,53 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                         </li>
                         
                         <!-- Notification Items -->
-                        <li>
-                            <a class="dropdown-item py-3 border-bottom" href="#">
-                                <div class="d-flex align-items-start">
-                                    <div class="bg-primary bg-opacity-10 rounded-circle p-2 me-3">
-                                        <i class="fas fa-syringe text-primary"></i>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <p class="mb-1 small fw-semibold">Vaccination Due Soon</p>
-                                        <p class="mb-0 text-muted" style="font-size: 0.8rem;">Your child's MMR vaccine is due in 3 days</p>
-                                        <small class="text-muted">2 hours ago</small>
-                                    </div>
-                                </div>
-                            </a>
-                        </li>
-                        
-                        <li>
-                            <a class="dropdown-item py-3 border-bottom" href="#">
-                                <div class="d-flex align-items-start">
-                                    <div class="bg-success bg-opacity-10 rounded-circle p-2 me-3">
-                                        <i class="fas fa-check-circle text-success"></i>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <p class="mb-1 small fw-semibold">Appointment Confirmed</p>
-                                        <p class="mb-0 text-muted" style="font-size: 0.8rem;">Your booking for Feb 15 has been confirmed</p>
-                                        <small class="text-muted">5 hours ago</small>
-                                    </div>
-                                </div>
-                            </a>
-                        </li>
-                        
-                        <li>
-                            <a class="dropdown-item py-3" href="#">
-                                <div class="d-flex align-items-start">
-                                    <div class="bg-info bg-opacity-10 rounded-circle p-2 me-3">
-                                        <i class="fas fa-info-circle text-info"></i>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <p class="mb-1 small fw-semibold">New Vaccine Available</p>
-                                        <p class="mb-0 text-muted" style="font-size: 0.8rem;">COVID-19 booster now available for children</p>
-                                        <small class="text-muted">1 day ago</small>
-                                    </div>
-                                </div>
-                            </a>
-                        </li>
+                        <?php if (count($notifs) > 0): ?>
+                            <?php foreach ($notifs as $notif): ?>
+                                <?php
+                                    // Determine icon and color based on type
+                                    $icon = 'fa-info-circle';
+                                    $colorClass = 'text-primary';
+                                    $bgClass = 'bg-primary';
+                                    
+                                    if ($notif['type'] == 'vaccination') {
+                                        $icon = 'fa-syringe';
+                                        $colorClass = 'text-danger';
+                                        $bgClass = 'bg-danger';
+                                    } elseif ($notif['type'] == 'appointment') {
+                                        $icon = 'fa-calendar-check';
+                                        $colorClass = 'text-success';
+                                        $bgClass = 'bg-success';
+                                    } elseif ($notif['type'] == 'system') {
+                                        $icon = 'fa-cog';
+                                        $colorClass = 'text-secondary';
+                                        $bgClass = 'bg-secondary';
+                                    }
+                                    
+                                    // Time formatting
+                                    $time_ago = function_exists('time_elapsed_string') 
+                                        ? time_elapsed_string($notif['created_at']) 
+                                        : date('M d, H:i', strtotime($notif['created_at']));
+                                ?>
+                                <li>
+                                    <a class="dropdown-item py-3 border-bottom" href="#">
+                                        <div class="d-flex align-items-start">
+                                            <div class="<?= $bgClass ?> bg-opacity-10 rounded-circle p-2 me-3">
+                                                <i class="fas <?= $icon ?> <?= $colorClass ?>"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <p class="mb-1 small fw-semibold"><?= htmlspecialchars($notif['title']) ?></p>
+                                                <p class="mb-0 text-muted" style="font-size: 0.8rem; white-space: normal;"><?= htmlspecialchars($notif['message']) ?></p>
+                                                <small class="text-muted"><?= $time_ago ?></small>
+                                            </div>
+                                        </div>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <li class="text-center py-4">
+                                <p class="text-muted small mb-0">No notifications found</p>
+                            </li>
+                        <?php endif; ?>
                         
                         <li class="text-center py-2 border-top">
                             <a href="/vaccination_management_system/parent/notifications/notifications.php" class="text-decoration-none small fw-semibold text-primary">View All Notifications</a>
@@ -122,9 +156,9 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                     </ul>
                 </li>
 
-                <!-- Profile Dropdown -->
-                <li class="nav-item dropdown">
-                    <a class="nav-link d-flex align-items-center gap-2 pe-0" href="#" id="profileDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <!-- Profile Link -->
+                <li class="nav-item">
+                    <a class="nav-link d-flex align-items-center gap-2 pe-0" href="/vaccination_management_system/parent/profile/profile.php">
                         <div class="d-none d-md-block text-end">
                             <p class="mb-0 small fw-semibold text-dark"><?= $_SESSION['name'] ?></p>
                             <p class="mb-0 text-muted" style="font-size: 0.75rem;">Parent</p>
@@ -133,29 +167,6 @@ $pageTitle = ucwords(str_replace("_", " ", $currentPage));
                             <i class="fas fa-user text-primary"></i>
                         </div>
                     </a>
-                    
-                    <!-- Profile Dropdown Menu -->
-                    <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-3 mt-2" aria-labelledby="profileDropdown">
-                        <li>
-                            <a class="dropdown-item rounded-2 py-2" href="/vaccination_management_system/parent/profile/profile.php">
-                                <i class="fas fa-user-circle me-2 text-primary"></i>
-                                My Profile
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item rounded-2 py-2" href="settings.php">
-                                <i class="fas fa-cog me-2 text-secondary"></i>
-                                Settings
-                            </a>
-                        </li>
-                        <li><hr class="dropdown-divider my-2"></li>
-                        <li>
-                            <a class="dropdown-item rounded-2 py-2 text-danger" href="../auth/logout.php">
-                                <i class="fas fa-sign-out-alt me-2"></i>
-                                Logout
-                            </a>
-                        </li>
-                    </ul>
                 </li>
             </ul>
         </div>
